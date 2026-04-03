@@ -153,6 +153,11 @@ mod tests {
     use forge::testing::IsolatedTestDb;
     use std::path::Path;
 
+    fn require_test_db() -> bool {
+        dotenvy::dotenv().ok();
+        std::env::var("TEST_DATABASE_URL").is_ok()
+    }
+
     async fn setup_db() -> IsolatedTestDb {
         IsolatedTestDb::setup(
             "auth_test",
@@ -187,6 +192,9 @@ mod tests {
 
     #[tokio::test]
     async fn insert_user_creates_record() {
+        if !require_test_db() {
+            return;
+        }
         let db = setup_db().await;
         let user = insert_user(db.pool(), "test@example.com", "password123").await;
 
@@ -199,6 +207,9 @@ mod tests {
 
     #[tokio::test]
     async fn duplicate_email_rejected() {
+        if !require_test_db() {
+            return;
+        }
         let db = setup_db().await;
         insert_user(db.pool(), "dupe@example.com", "password123").await;
 
@@ -216,6 +227,9 @@ mod tests {
 
     #[tokio::test]
     async fn user_lookup_by_email() {
+        if !require_test_db() {
+            return;
+        }
         let db = setup_db().await;
         insert_user(db.pool(), "find@example.com", "password123").await;
 

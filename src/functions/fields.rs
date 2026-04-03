@@ -153,6 +153,11 @@ mod tests {
     use forge::testing::IsolatedTestDb;
     use std::path::Path;
 
+    fn require_test_db() -> bool {
+        dotenvy::dotenv().ok();
+        std::env::var("TEST_DATABASE_URL").is_ok()
+    }
+
     async fn setup_db() -> IsolatedTestDb {
         IsolatedTestDb::setup(
             "fields_test",
@@ -179,6 +184,9 @@ mod tests {
 
     #[tokio::test]
     async fn create_and_list_field_definitions() {
+        if !require_test_db() {
+            return;
+        }
         let db = setup_db().await;
         let uid = insert_user(db.pool()).await;
 
@@ -209,6 +217,9 @@ mod tests {
 
     #[tokio::test]
     async fn duplicate_key_rejected() {
+        if !require_test_db() {
+            return;
+        }
         let db = setup_db().await;
         let uid = insert_user(db.pool()).await;
 
@@ -235,6 +246,9 @@ mod tests {
 
     #[tokio::test]
     async fn cascade_delete_removes_task_fields() {
+        if !require_test_db() {
+            return;
+        }
         let db = setup_db().await;
         let uid = insert_user(db.pool()).await;
 

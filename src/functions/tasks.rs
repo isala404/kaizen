@@ -291,6 +291,11 @@ mod tests {
     use forge::testing::IsolatedTestDb;
     use std::path::Path;
 
+    fn require_test_db() -> bool {
+        dotenvy::dotenv().ok();
+        std::env::var("TEST_DATABASE_URL").is_ok()
+    }
+
     async fn setup_db() -> IsolatedTestDb {
         IsolatedTestDb::setup(
             "tasks_test",
@@ -333,6 +338,9 @@ mod tests {
 
     #[tokio::test]
     async fn task_defaults_to_inbox() {
+        if !require_test_db() {
+            return;
+        }
         let db = setup_db().await;
         let uid = insert_user(db.pool()).await;
         let task = insert_task(db.pool(), uid, "My task").await;
@@ -347,6 +355,9 @@ mod tests {
 
     #[tokio::test]
     async fn tasks_scoped_to_user() {
+        if !require_test_db() {
+            return;
+        }
         let db = setup_db().await;
         let uid_a = insert_user(db.pool()).await;
         let uid_b = insert_user(db.pool()).await;
@@ -372,6 +383,9 @@ mod tests {
 
     #[tokio::test]
     async fn update_task_changes_fields() {
+        if !require_test_db() {
+            return;
+        }
         let db = setup_db().await;
         let uid = insert_user(db.pool()).await;
         let task = insert_task(db.pool(), uid, "Original").await;
@@ -398,6 +412,9 @@ mod tests {
 
     #[tokio::test]
     async fn delete_task_removes_it() {
+        if !require_test_db() {
+            return;
+        }
         let db = setup_db().await;
         let uid = insert_user(db.pool()).await;
         let task = insert_task(db.pool(), uid, "To delete").await;
@@ -420,6 +437,9 @@ mod tests {
 
     #[tokio::test]
     async fn only_one_focused_task_per_user() {
+        if !require_test_db() {
+            return;
+        }
         let db = setup_db().await;
         let uid = insert_user(db.pool()).await;
 
