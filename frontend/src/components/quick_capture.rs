@@ -20,6 +20,11 @@ pub fn QuickCapture(on_submit: EventHandler<String>, on_close: EventHandler<()>)
                     placeholder: "What needs to be done?",
                     value: "{title}",
                     oninput: move |e| title.set(e.value()),
+                    onmounted: move |e| {
+                        spawn(async move {
+                            let _ = e.set_focus(true).await;
+                        });
+                    },
                     onkeydown: move |e| {
                         if e.key() == Key::Escape {
                             on_close.call(());

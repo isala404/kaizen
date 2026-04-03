@@ -7,6 +7,8 @@ use crate::forge::{Task, TaskStatus};
 pub fn BoardColumn(
     label: String,
     status: TaskStatus,
+    is_focused: bool,
+    focused_row: Option<usize>,
     tasks: Vec<Task>,
     on_select: EventHandler<String>,
     on_delete: EventHandler<String>,
@@ -18,6 +20,12 @@ pub fn BoardColumn(
     let mut show_add = use_signal(|| false);
     let mut add_title = use_signal(String::new);
 
+    let col_class = if is_focused {
+        "board-column board-column-focused"
+    } else {
+        "board-column"
+    };
+
     let empty_hint = match status {
         TaskStatus::Inbox => "Press N to add a task",
         TaskStatus::UpNext => "Drag tasks here to plan your day",
@@ -28,7 +36,7 @@ pub fn BoardColumn(
     };
 
     rsx! {
-        div { class: "board-column",
+        div { class: "{col_class}",
             div { class: "column-header",
                 h3 { class: "column-title", "{label}" }
                 span { class: "column-count", "{count}" }
@@ -37,10 +45,11 @@ pub fn BoardColumn(
                 if tasks.is_empty() {
                     p { class: "column-empty", "{empty_hint}" }
                 }
-                for task in &tasks {
+                for (i, task) in tasks.iter().enumerate() {
                     TaskCard {
                         key: "{task.id}",
                         task: task.clone(),
+                        selected: focused_row == Some(i),
                         on_select,
                         on_delete,
                         on_focus,

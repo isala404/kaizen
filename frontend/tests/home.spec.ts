@@ -95,6 +95,53 @@ test.describe("Tasks", () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
+  test("quick capture via n key", async ({ page }) => {
+    // Press n to open capture bar
+    await page.locator(".dashboard").press("n");
+    await expect(page.locator(".capture-input")).toBeVisible();
+    await expect(page.locator(".capture-input")).toBeFocused();
+
+    // Type and submit
+    await page.locator(".capture-input").fill("Keyboard task");
+    await page.locator(".capture-input").press("Enter");
+
+    // Capture bar should close and task should appear
+    await expect(page.locator(".capture-input")).not.toBeVisible();
+    await expect(
+      page.locator(".task-card-title", { hasText: "Keyboard task" }),
+    ).toBeVisible({ timeout: 10000 });
+  });
+
+  test("edit task title in detail panel", async ({ page }) => {
+    // Create a task first
+    await page
+      .locator(".board-column")
+      .first()
+      .locator(".column-add-btn")
+      .click();
+    await page.locator(".add-task-input").fill("Edit me");
+    await page.locator(".add-task-submit").click();
+    await expect(
+      page.locator(".task-card-title", { hasText: "Edit me" }),
+    ).toBeVisible({ timeout: 10000 });
+
+    // Click title to open detail panel
+    await page.locator(".task-card-title", { hasText: "Edit me" }).click();
+    await expect(page.locator(".detail-panel")).toBeVisible();
+
+    // Edit the title
+    const titleInput = page.locator(".detail-title-input");
+    await titleInput.clear();
+    await titleInput.fill("Edited title");
+    await titleInput.blur();
+
+    // Close and verify
+    await page.locator(".detail-close").click();
+    await expect(
+      page.locator(".task-card-title", { hasText: "Edited title" }),
+    ).toBeVisible({ timeout: 10000 });
+  });
+
   test("delete a task", async ({ page }) => {
     // Create a task first
     await page

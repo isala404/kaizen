@@ -8,6 +8,15 @@ use crate::forge::{
     use_create_task, use_delete_task, use_focus_task, use_list_tasks_live, use_unfocus_task,
     use_update_task, use_viewer,
 };
+use crate::time_utils;
+
+const COLUMN_STATUSES: [TaskStatus; 5] = [
+    TaskStatus::Inbox,
+    TaskStatus::UpNext,
+    TaskStatus::InProgress,
+    TaskStatus::Paused,
+    TaskStatus::Done,
+];
 
 #[component]
 pub fn Dashboard() -> Element {
@@ -23,12 +32,44 @@ pub fn Dashboard() -> Element {
     let mut selected_task_id = use_signal(|| Option::<String>::None);
     let mut show_capture = use_signal(|| false);
     let mut active_tab = use_signal(|| TaskStatus::Inbox);
+    let mut focused_col = use_signal(|| Option::<usize>::None);
+    let mut focused_row = use_signal(|| Option::<usize>::None);
+
+    // Live timer tick
+    let mut tick = use_signal(|| 0u64);
+    use_future(move || async move {
+        loop {
+            gloo_timers::future::TimeoutFuture::new(1_000).await;
+            tick.set(tick() + 1);
+        }
+    });
 
     let tasks: Vec<Task> = tasks_state.data.clone().unwrap_or_default();
     let focused_task = tasks
         .iter()
         .find(|t| t.status == TaskStatus::Focused)
         .cloned();
+
+    let _tick_val = tick();
+    let focused_elapsed = focused_task
+        .as_ref()
+        .map(|t| time_utils::focused_elapsed(t.time_spent_secs, &t.updated_at));
+
+    let daily_total: i64 = tasks
+        .iter()
+        .map(|t| {
+            if t.status == TaskStatus::Focused {
+                focused_elapsed.unwrap_or(t.time_spent_secs)
+            } else {
+                t.time_spent_secs
+            }
+        })
+        .sum();
+
+    // Store tasks in signal so keyboard handler can access without moving
+    let mut tasks_sig = use_signal(Vec::<Task>::new);
+    // Update on each render
+    *tasks_sig.write() = tasks.clone();
 
     let on_create = {
         let create = create.clone();
@@ -82,6 +123,16 @@ pub fn Dashboard() -> Element {
         }
     };
 
+    let on_update = {
+        let update = update.clone();
+        move |input: UpdateTaskInput| {
+            let update = update.clone();
+            spawn(async move {
+                let _ = update.call(input).await;
+            });
+        }
+    };
+
     let on_select = move |id: String| {
         selected_task_id.set(Some(id));
     };
@@ -95,12 +146,105 @@ pub fn Dashboard() -> Element {
         id.and_then(|sid| tasks.iter().find(|t| t.id == sid).cloned())
     };
 
+    // Keyboard handler uses cloned mutation handles directly
+    let on_keydown = {
+        let focus_mut = focus.clone();
+        let unfocus_mut = unfocus.clone();
+        move |e: Event<KeyboardData>| {
+            // Skip if an input/textarea is focused (except Escape)
+            if let Some(window) = web_sys::window()
+                && let Some(doc) = window.document()
+                && let Some(el) = doc.active_element()
+            {
+                let tag = el.tag_name().to_lowercase();
+                if tag == "input" || tag == "textarea" {
+                    if e.key() == Key::Escape {
+                        show_capture.set(false);
+                        selected_task_id.set(None);
+                    }
+                    return;
+                }
+            }
+
+            let get_col_tasks = |col: usize| -> Vec<Task> {
+                let all = tasks_sig.read();
+                all.iter()
+                    .filter(|t| t.status == COLUMN_STATUSES[col])
+                    .cloned()
+                    .collect()
+            };
+
+            match e.key() {
+                Key::Escape => {
+                    show_capture.set(false);
+                    selected_task_id.set(None);
+                    focused_col.set(None);
+                    focused_row.set(None);
+                }
+                Key::Character(ref c) if c == "n" => {
+                    show_capture.set(true);
+                }
+                Key::Character(ref c) if ("1"..="5").contains(&c.as_str()) => {
+                    let col = c.parse::<usize>().unwrap_or(1) - 1;
+                    focused_col.set(Some(col));
+                    focused_row.set(Some(0));
+                }
+                Key::Character(ref c) if c == "j" => {
+                    if let Some(col) = *focused_col.read() {
+                        let count = get_col_tasks(col).len();
+                        if count > 0 {
+                            let row = focused_row.read().unwrap_or(0);
+                            focused_row.set(Some((row + 1).min(count - 1)));
+                        }
+                    }
+                }
+                Key::Character(ref c) if c == "k" => {
+                    if focused_col.read().is_some() {
+                        let row = focused_row.read().unwrap_or(0);
+                        focused_row.set(Some(row.saturating_sub(1)));
+                    }
+                }
+                Key::Enter => {
+                    if let (Some(col), Some(row)) = (*focused_col.read(), *focused_row.read()) {
+                        let col_tasks = get_col_tasks(col);
+                        if let Some(task) = col_tasks.get(row) {
+                            selected_task_id.set(Some(task.id.clone()));
+                        }
+                    }
+                }
+                Key::Character(ref c) if c == " " => {
+                    e.prevent_default();
+                    if let (Some(col), Some(row)) = (*focused_col.read(), *focused_row.read()) {
+                        let col_tasks = get_col_tasks(col);
+                        if let Some(task) = col_tasks.get(row) {
+                            let focus_mut = focus_mut.clone();
+                            let id = task.id.clone();
+                            spawn(async move {
+                                let _ = focus_mut.call(FocusTaskInput::new(id)).await;
+                            });
+                        }
+                    }
+                }
+                Key::Backspace => {
+                    let unfocus_mut = unfocus_mut.clone();
+                    spawn(async move {
+                        let _ = unfocus_mut.call(()).await;
+                    });
+                }
+                _ => {}
+            }
+        }
+    };
+
     rsx! {
-        div { class: "dashboard",
+        div {
+            class: "dashboard",
+            tabindex: 0,
+            onkeydown: on_keydown,
+
             Header {
                 viewer: viewer.clone(),
-                tasks: tasks.clone(),
-                focused_task: focused_task.clone(),
+                daily_total,
             }
 
             if *show_capture.read() {
@@ -116,16 +260,18 @@ pub fn Dashboard() -> Element {
                 }
             }
 
-            // Desktop layout
             div { class: "desktop-layout",
                 FocusDock {
                     task: focused_task.clone(),
+                    elapsed_secs: focused_elapsed,
                     on_click: on_select,
                     on_unfocus: on_unfocus.clone(),
                 }
 
                 Board {
                     tasks: tasks.clone(),
+                    focused_col: *focused_col.read(),
+                    focused_row: *focused_row.read(),
                     on_select,
                     on_delete: on_delete.clone(),
                     on_focus: on_focus.clone(),
@@ -134,7 +280,6 @@ pub fn Dashboard() -> Element {
                 }
             }
 
-            // Mobile layout
             div { class: "mobile-layout",
                 if let Some(ref ft) = focused_task {
                     div {
@@ -146,7 +291,9 @@ pub fn Dashboard() -> Element {
                         },
                         div { class: "focus-bar-dot" }
                         span { class: "focus-bar-title", "{ft.title}" }
-                        span { class: "focus-bar-time", "{format_time(ft.time_spent_secs)}" }
+                        span { class: "focus-bar-time",
+                            "{time_utils::format_timer(focused_elapsed.unwrap_or(0))}"
+                        }
                     }
                 }
 
@@ -178,20 +325,9 @@ pub fn Dashboard() -> Element {
                     on_close: on_close_detail,
                     on_status_change: on_status_change.clone(),
                     on_focus: on_focus.clone(),
+                    on_update,
                 }
             }
         }
-    }
-}
-
-pub fn format_time(secs: i64) -> String {
-    let h = secs / 3600;
-    let m = (secs % 3600) / 60;
-    if h > 0 {
-        format!("{h}h {m:02}m")
-    } else if m > 0 {
-        format!("{m}m")
-    } else {
-        String::new()
     }
 }
