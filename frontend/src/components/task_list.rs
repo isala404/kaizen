@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::components::{StatusChange, TaskCard};
+use crate::components::{StatusChange, SwipeableCard, TaskCard};
 use crate::forge::{Task, TaskStatus};
 
 #[component]
@@ -29,12 +29,19 @@ pub fn TaskList(
                 p { class: "column-empty", "{empty_hint}" }
             }
             for task in filtered {
-                TaskCard {
+                SwipeableCard {
                     key: "{task.id}",
-                    task: task.clone(),
-                    on_select,
-                    on_delete,
-                    on_focus,
+                    task_id: task.id.clone(),
+                    status: task.status.clone(),
+                    on_swipe: move |(id, status): (String, TaskStatus)| {
+                        on_status_change.call(StatusChange { id, status });
+                    },
+                    TaskCard {
+                        task: task.clone(),
+                        on_select,
+                        on_delete,
+                        on_focus,
+                    }
                 }
             }
         }

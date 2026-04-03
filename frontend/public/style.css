@@ -509,6 +509,72 @@ a:hover {
   border-color: var(--accent);
 }
 
+/* === Drag-and-Drop === */
+.board-column-drag-over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.focus-dock-drag-over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 0 24px var(--accent-glow);
+}
+
+.task-card-dragging {
+  opacity: 0.4;
+}
+
+.drop-indicator {
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  margin: -1px 0;
+  box-shadow: 0 0 6px var(--accent-glow);
+}
+
+/* === Swipe Gestures (Mobile) === */
+.swipeable-wrapper {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.swipeable-inner {
+  position: relative;
+  z-index: 1;
+  transition: transform 0.15s ease-out;
+}
+
+.swipeable-inner.swiping {
+  transition: none;
+}
+
+.swipe-reveal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  border-radius: 8px;
+}
+
+.swipe-reveal-forward {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--green);
+  justify-content: flex-start;
+}
+
+.swipe-reveal-back {
+  background: rgba(90, 90, 94, 0.15);
+  color: var(--text-muted);
+  justify-content: flex-end;
+}
+
 /* === Board === */
 .board-columns {
   display: grid;

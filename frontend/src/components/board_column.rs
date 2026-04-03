@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::components::{StatusChange, TaskCard};
+use crate::components::{DropTarget, StatusChange, TaskCard};
 use crate::forge::{FieldDefinition, Task, TaskField, TaskStatus};
 
 #[component]
@@ -12,21 +12,31 @@ pub fn BoardColumn(
     tasks: Vec<Task>,
     field_defs: Vec<FieldDefinition>,
     task_fields: Vec<TaskField>,
+    dragging_id: Option<String>,
     on_select: EventHandler<String>,
     on_delete: EventHandler<String>,
     on_focus: EventHandler<String>,
     on_create: EventHandler<String>,
     on_status_change: EventHandler<StatusChange>,
+    on_drag_start: EventHandler<String>,
+    on_drag_end: EventHandler<()>,
+    on_drop: EventHandler<DropTarget>,
 ) -> Element {
     let count = tasks.len();
     let mut show_add = use_signal(|| false);
     let mut add_title = use_signal(String::new);
+    let mut drag_over = use_signal(|| false);
 
-    let col_class = if is_focused {
-        "board-column board-column-focused"
-    } else {
-        "board-column"
-    };
+    let is_dragging = dragging_id.is_some();
+
+    let mut col_classes = vec!["board-column"];
+    if is_focused {
+        col_classes.push("board-column-focused");
+    }
+    if *drag_over.read() && is_dragging {
+        col_classes.push("board-column-drag-over");
+    }
+    let col_class = col_classes.join(" ");
 
     let empty_hint = match status {
         TaskStatus::Inbox => "Press N to add a task",
@@ -37,8 +47,31 @@ pub fn BoardColumn(
         _ => "",
     };
 
+    // Compute drop position: end of column
+    let end_position = tasks.last().map(|t| t.position + 10_000).unwrap_or(10_000);
+
     rsx! {
-        div { class: "{col_class}",
+        div {
+            class: "{col_class}",
+            ondragover: move |e| {
+                e.prevent_default();
+                drag_over.set(true);
+            },
+            ondragleave: move |_| drag_over.set(false),
+            ondrop: {
+                let status = status.clone();
+                move |e: Event<DragData>| {
+                    e.prevent_default();
+                    drag_over.set(false);
+                    if let Some(ref did) = dragging_id {
+                        on_drop.call(DropTarget {
+                            task_id: did.clone(),
+                            status: status.clone(),
+                            position: end_position,
+                        });
+                    }
+                }
+            },
             div { class: "column-header",
                 h3 { class: "column-title", "{label}" }
                 span { class: "column-count", "{count}" }
@@ -54,9 +87,12 @@ pub fn BoardColumn(
                         field_defs: field_defs.clone(),
                         task_fields: task_fields.clone(),
                         selected: focused_row == Some(i),
+                        dragging_id: dragging_id.clone(),
                         on_select,
                         on_delete,
                         on_focus,
+                        on_drag_start: on_drag_start,
+                        on_drag_end: on_drag_end,
                     }
                 }
 

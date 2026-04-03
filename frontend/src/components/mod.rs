@@ -24,10 +24,27 @@ pub use status_tabs::StatusTabs;
 pub use task_card::TaskCard;
 pub use task_list::TaskList;
 
+mod swipeable_card;
+
+pub use swipeable_card::SwipeableCard;
+
 use crate::forge::TaskStatus;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StatusChange {
     pub id: String,
     pub status: TaskStatus,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DragPayload {
+    pub task_id: String,
+    pub source_status: TaskStatus,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DropTarget {
+    pub task_id: String,
+    pub status: TaskStatus,
+    pub position: i32,
 }

@@ -1,14 +1,14 @@
 use dioxus::prelude::*;
 
 use crate::components::{
-    ActiveFilters, Board, DetailPanel, FieldFilterBar, FieldManager, FocusDock, Header,
+    ActiveFilters, Board, DetailPanel, DropTarget, FieldFilterBar, FieldManager, FocusDock, Header,
     QuickCapture, StatusChange, StatusTabs, TaskList,
 };
 use crate::forge::{
-    CreateTaskInput, DeleteTaskInput, FieldDefinition, FocusTaskInput, Task, TaskField, TaskStatus,
-    UpdateTaskInput, Viewer, use_create_task, use_delete_task, use_focus_task,
-    use_list_all_task_fields_live, use_list_field_definitions_live, use_list_tasks_live,
-    use_unfocus_task, use_update_task, use_viewer,
+    CreateTaskInput, DeleteTaskInput, FieldDefinition, FocusTaskInput, ReorderTaskInput, Task,
+    TaskField, TaskStatus, UpdateTaskInput, Viewer, use_create_task, use_delete_task,
+    use_focus_task, use_list_all_task_fields_live, use_list_field_definitions_live,
+    use_list_tasks_live, use_reorder_task, use_unfocus_task, use_update_task, use_viewer,
 };
 use crate::time_utils;
 
@@ -30,9 +30,11 @@ pub fn Dashboard() -> Element {
     let focus = use_focus_task();
     let unfocus = use_unfocus_task();
     let update = use_update_task();
+    let reorder = use_reorder_task();
 
     let mut selected_task_id = use_signal(|| Option::<String>::None);
     let mut show_capture = use_signal(|| false);
+    let mut dragging_id = use_signal(|| Option::<String>::None);
     let mut active_tab = use_signal(|| TaskStatus::Inbox);
     let mut focused_col = use_signal(|| Option::<usize>::None);
     let mut focused_row = use_signal(|| Option::<usize>::None);
@@ -154,6 +156,50 @@ pub fn Dashboard() -> Element {
             spawn(async move {
                 let _ = update.call(input).await;
             });
+        }
+    };
+
+    let on_drag_start = move |id: String| {
+        dragging_id.set(Some(id));
+    };
+
+    let on_drag_end = move |_: ()| {
+        dragging_id.set(None);
+    };
+
+    let on_drop = {
+        let reorder = reorder.clone();
+        move |target: DropTarget| {
+            let drag_id = dragging_id.read().clone();
+            dragging_id.set(None);
+            if let Some(task_id) = drag_id {
+                if task_id != target.task_id {
+                    let reorder = reorder.clone();
+                    spawn(async move {
+                        let _ = reorder
+                            .call(ReorderTaskInput::new(
+                                task_id,
+                                target.status,
+                                target.position,
+                            ))
+                            .await;
+                    });
+                }
+            }
+        }
+    };
+
+    let on_drop_focus = {
+        let focus = focus.clone();
+        move |_: String| {
+            let drag_id = dragging_id.read().clone();
+            dragging_id.set(None);
+            if let Some(task_id) = drag_id {
+                let focus = focus.clone();
+                spawn(async move {
+                    let _ = focus.call(FocusTaskInput::new(task_id)).await;
+                });
+            }
         }
     };
 
@@ -299,8 +345,10 @@ pub fn Dashboard() -> Element {
                 FocusDock {
                     task: focused_task.clone(),
                     elapsed_secs: focused_elapsed,
+                    is_drag_active: dragging_id.read().is_some(),
                     on_click: on_select,
                     on_unfocus: on_unfocus.clone(),
+                    on_drop_focus: on_drop_focus.clone(),
                 }
 
                 Board {
@@ -309,11 +357,15 @@ pub fn Dashboard() -> Element {
                     task_fields: all_task_fields.clone(),
                     focused_col: *focused_col.read(),
                     focused_row: *focused_row.read(),
+                    dragging_id: dragging_id.read().clone(),
                     on_select,
                     on_delete: on_delete.clone(),
                     on_focus: on_focus.clone(),
                     on_create: on_create.clone(),
                     on_status_change: on_status_change.clone(),
+                    on_drag_start,
+                    on_drag_end,
+                    on_drop,
                 }
             }
 
