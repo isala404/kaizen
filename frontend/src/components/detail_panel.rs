@@ -1,17 +1,24 @@
 use dioxus::prelude::*;
 
 use crate::components::StatusChange;
-use crate::forge::{Task, TaskStatus, UpdateTaskInput};
+use crate::forge::{
+    FieldDefinition, FieldValueType, SetTaskFieldInput, Task, TaskField, TaskStatus,
+    UpdateTaskInput, use_set_task_field,
+};
 use crate::time_utils;
 
 #[component]
 pub fn DetailPanel(
     task: Task,
+    field_defs: Option<Vec<FieldDefinition>>,
+    task_fields: Option<Vec<TaskField>>,
     on_close: EventHandler<()>,
     on_status_change: EventHandler<StatusChange>,
     on_focus: EventHandler<String>,
     on_update: EventHandler<UpdateTaskInput>,
 ) -> Element {
+    let set_field = use_set_task_field();
+
     let mut editing_desc = use_signal(|| false);
     let mut desc_draft = use_signal(|| task.description.clone());
     let mut title_draft = use_signal(|| task.title.clone());
@@ -37,13 +44,14 @@ pub fn DetailPanel(
     ];
 
     let time_str = time_utils::format_duration(task.time_spent_secs);
-
-    // Due date formatted for input[type=date]
     let due_date_val = task
         .due_at
         .as_ref()
         .and_then(|d| d.get(..10).map(|s| s.to_string()))
         .unwrap_or_default();
+
+    let fields = field_defs.unwrap_or_default();
+    let tfs = task_fields.unwrap_or_default();
 
     rsx! {
         div {
@@ -55,9 +63,7 @@ pub fn DetailPanel(
             onclick: move |e| e.stop_propagation(),
 
             div { class: "detail-header",
-                div { class: "detail-status",
-                    span { class: "status-pill", "{status_label}" }
-                }
+                span { class: "status-pill", "{status_label}" }
                 button {
                     class: "detail-close",
                     onclick: move |_| on_close.call(()),
@@ -65,7 +71,6 @@ pub fn DetailPanel(
                 }
             }
 
-            // Editable title
             input {
                 class: "detail-title-input",
                 value: "{title_draft}",
@@ -81,7 +86,7 @@ pub fn DetailPanel(
                 },
             }
 
-            // Status options
+            // Status
             div { class: "detail-section",
                 label { class: "detail-label", "Status" }
                 div { class: "detail-status-options",
@@ -103,6 +108,119 @@ pub fn DetailPanel(
                                 }
                             },
                             "{label}"
+                        }
+                    }
+                }
+            }
+
+            // Fields
+            if !fields.is_empty() {
+                div { class: "detail-section",
+                    label { class: "detail-label", "Fields" }
+                    for fd in &fields {
+                        {
+                            let current_val = tfs.iter()
+                                .find(|tf| tf.task_id == task.id && tf.field_id == fd.id)
+                                .map(|tf| tf.value.clone())
+                                .unwrap_or_default();
+                            let fd_id = fd.id.clone();
+                            let task_id = task.id.clone();
+                            rsx! {
+                                div { class: "detail-field-row",
+                                    span { class: "detail-field-key", "{fd.key}" }
+                                    match fd.value_type {
+                                        FieldValueType::Enum => {
+                                            let options = fd.options.clone().unwrap_or_default();
+                                            rsx! {
+                                                select {
+                                                    class: "field-select",
+                                                    value: "{current_val}",
+                                                    onchange: {
+                                                        let set_field = set_field.clone();
+                                                        let fd_id = fd_id.clone();
+                                                        let task_id = task_id.clone();
+                                                        move |e: Event<FormData>| {
+                                                            let set_field = set_field.clone();
+                                                            let input = SetTaskFieldInput {
+                                                                task_id: task_id.clone(),
+                                                                field_id: fd_id.clone(),
+                                                                value: e.value(),
+                                                            };
+                                                            spawn(async move {
+                                                                let _ = set_field.call(input).await;
+                                                            });
+                                                        }
+                                                    },
+                                                    option { value: "", "—" }
+                                                    for opt in &options {
+                                                        option { value: "{opt}", "{opt}" }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        FieldValueType::Bool => rsx! {
+                                            input {
+                                                class: "field-checkbox",
+                                                r#type: "checkbox",
+                                                checked: current_val == "true",
+                                                onchange: {
+                                                    let set_field = set_field.clone();
+                                                    let fd_id = fd_id.clone();
+                                                    let task_id = task_id.clone();
+                                                    let cv = current_val.clone();
+                                                    move |_| {
+                                                        let new_val = if cv == "true" { "false" } else { "true" };
+                                                        let set_field = set_field.clone();
+                                                        let input = SetTaskFieldInput {
+                                                            task_id: task_id.clone(),
+                                                            field_id: fd_id.clone(),
+                                                            value: new_val.to_string(),
+                                                        };
+                                                        spawn(async move {
+                                                            let _ = set_field.call(input).await;
+                                                        });
+                                                    }
+                                                },
+                                            }
+                                        },
+                                        _ => rsx! {
+                                            input {
+                                                class: "detail-field-input",
+                                                value: "{current_val}",
+                                                placeholder: "Set {fd.key}...",
+                                                onblur: {
+                                                    let set_field = set_field.clone();
+                                                    let fd_id = fd_id.clone();
+                                                    let task_id = task_id.clone();
+                                                    move |e: Event<FocusData>| {
+                                                        // Read from the input value via web_sys
+                                                        // For now, we use a simple approach
+                                                    }
+                                                },
+                                                onchange: {
+                                                    let set_field = set_field.clone();
+                                                    let fd_id = fd_id.clone();
+                                                    let task_id = task_id.clone();
+                                                    move |e: Event<FormData>| {
+                                                        let val = e.value();
+                                                        if !val.is_empty() {
+                                                            let set_field = set_field.clone();
+                                                            let input = SetTaskFieldInput {
+                                                                task_id: task_id.clone(),
+                                                                field_id: fd_id.clone(),
+                                                                value: val,
+                                                            };
+                                                            spawn(async move {
+                                                                let _ = set_field.call(input).await;
+                                                            });
+                                                        }
+                                                    }
+                                                },
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

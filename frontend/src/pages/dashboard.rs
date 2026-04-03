@@ -1,12 +1,14 @@
 use dioxus::prelude::*;
 
 use crate::components::{
-    Board, DetailPanel, FocusDock, Header, QuickCapture, StatusChange, StatusTabs, TaskList,
+    ActiveFilters, Board, DetailPanel, FieldFilterBar, FieldManager, FocusDock, Header,
+    QuickCapture, StatusChange, StatusTabs, TaskList,
 };
 use crate::forge::{
-    CreateTaskInput, DeleteTaskInput, FocusTaskInput, Task, TaskStatus, UpdateTaskInput, Viewer,
-    use_create_task, use_delete_task, use_focus_task, use_list_tasks_live, use_unfocus_task,
-    use_update_task, use_viewer,
+    CreateTaskInput, DeleteTaskInput, FieldDefinition, FocusTaskInput, Task, TaskField, TaskStatus,
+    UpdateTaskInput, Viewer, use_create_task, use_delete_task, use_focus_task,
+    use_list_all_task_fields_live, use_list_field_definitions_live, use_list_tasks_live,
+    use_unfocus_task, use_update_task, use_viewer,
 };
 use crate::time_utils;
 
@@ -44,6 +46,14 @@ pub fn Dashboard() -> Element {
         }
     });
 
+    let field_defs_state = use_list_field_definitions_live();
+    let task_fields_state = use_list_all_task_fields_live();
+    let mut filters = use_signal(ActiveFilters::new);
+    let mut show_field_manager = use_signal(|| false);
+
+    let field_defs: Vec<FieldDefinition> = field_defs_state.data.clone().unwrap_or_default();
+    let all_task_fields: Vec<TaskField> = task_fields_state.data.clone().unwrap_or_default();
+
     let tasks: Vec<Task> = tasks_state.data.clone().unwrap_or_default();
     let focused_task = tasks
         .iter()
@@ -65,6 +75,20 @@ pub fn Dashboard() -> Element {
             }
         })
         .sum();
+
+    // Filter tasks by active field filters
+    let filtered_tasks: Vec<Task> = {
+        let f = filters.read();
+        if f.is_empty() {
+            tasks.clone()
+        } else {
+            tasks
+                .iter()
+                .filter(|t| f.matches(&t.id, &all_task_fields))
+                .cloned()
+                .collect()
+        }
+    };
 
     // Store tasks in signal so keyboard handler can access without moving
     let mut tasks_sig = use_signal(Vec::<Task>::new);
@@ -245,6 +269,7 @@ pub fn Dashboard() -> Element {
             Header {
                 viewer: viewer.clone(),
                 daily_total,
+                on_manage_fields: move |_| show_field_manager.set(true),
             }
 
             if *show_capture.read() {
@@ -260,6 +285,16 @@ pub fn Dashboard() -> Element {
                 }
             }
 
+            if !field_defs.is_empty() {
+                FieldFilterBar {
+                    fields: field_defs.clone(),
+                    filters: filters.read().clone(),
+                    on_toggle: move |(fid, val): (String, String)| {
+                        filters.write().toggle(&fid, &val);
+                    },
+                }
+            }
+
             div { class: "desktop-layout",
                 FocusDock {
                     task: focused_task.clone(),
@@ -269,7 +304,9 @@ pub fn Dashboard() -> Element {
                 }
 
                 Board {
-                    tasks: tasks.clone(),
+                    tasks: filtered_tasks.clone(),
+                    field_defs: field_defs.clone(),
+                    task_fields: all_task_fields.clone(),
                     focused_col: *focused_col.read(),
                     focused_row: *focused_row.read(),
                     on_select,
@@ -298,13 +335,13 @@ pub fn Dashboard() -> Element {
                 }
 
                 StatusTabs {
-                    tasks: tasks.clone(),
+                    tasks: filtered_tasks.clone(),
                     active: active_tab(),
                     on_change: move |status: TaskStatus| active_tab.set(status),
                 }
 
                 TaskList {
-                    tasks: tasks.clone(),
+                    tasks: filtered_tasks.clone(),
                     active_status: active_tab(),
                     on_select,
                     on_delete: on_delete.clone(),
@@ -322,10 +359,18 @@ pub fn Dashboard() -> Element {
             if let Some(task) = selected_task {
                 DetailPanel {
                     task: task,
+                    field_defs: field_defs.clone(),
+                    task_fields: all_task_fields.clone(),
                     on_close: on_close_detail,
                     on_status_change: on_status_change.clone(),
                     on_focus: on_focus.clone(),
                     on_update,
+                }
+            }
+
+            if *show_field_manager.read() {
+                FieldManager {
+                    on_close: move |_| show_field_manager.set(false),
                 }
             }
         }

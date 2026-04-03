@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::components::{StatusChange, TaskCard};
-use crate::forge::{Task, TaskStatus};
+use crate::forge::{FieldDefinition, Task, TaskField, TaskStatus};
 
 #[component]
 pub fn BoardColumn(
@@ -10,6 +10,8 @@ pub fn BoardColumn(
     is_focused: bool,
     focused_row: Option<usize>,
     tasks: Vec<Task>,
+    field_defs: Vec<FieldDefinition>,
+    task_fields: Vec<TaskField>,
     on_select: EventHandler<String>,
     on_delete: EventHandler<String>,
     on_focus: EventHandler<String>,
@@ -49,6 +51,8 @@ pub fn BoardColumn(
                     TaskCard {
                         key: "{task.id}",
                         task: task.clone(),
+                        field_defs: field_defs.clone(),
+                        task_fields: task_fields.clone(),
                         selected: focused_row == Some(i),
                         on_select,
                         on_delete,

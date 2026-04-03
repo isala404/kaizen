@@ -40,6 +40,46 @@ pub fn use_get_task(args: GetTaskInput) -> QueryState<Task> {
 pub fn use_get_task_live(args: GetTaskInput) -> SubscriptionState<Task> {
     use_forge_subscription("get_task", args)
 }
+pub async fn list_all_task_fields(
+    client: &ForgeClient,
+) -> Result<Vec<TaskField>, ForgeClientError> {
+    client.call("list_all_task_fields", ()).await
+}
+
+pub fn use_list_all_task_fields() -> QueryState<Vec<TaskField>> {
+    use_forge_query("list_all_task_fields", ())
+}
+
+pub fn use_list_all_task_fields_live() -> SubscriptionState<Vec<TaskField>> {
+    use_forge_subscription("list_all_task_fields", ())
+}
+pub async fn list_field_definitions(
+    client: &ForgeClient,
+) -> Result<Vec<FieldDefinition>, ForgeClientError> {
+    client.call("list_field_definitions", ()).await
+}
+
+pub fn use_list_field_definitions() -> QueryState<Vec<FieldDefinition>> {
+    use_forge_query("list_field_definitions", ())
+}
+
+pub fn use_list_field_definitions_live() -> SubscriptionState<Vec<FieldDefinition>> {
+    use_forge_subscription("list_field_definitions", ())
+}
+pub async fn list_task_fields(
+    client: &ForgeClient,
+    args: ListTaskFieldsInput,
+) -> Result<Vec<TaskField>, ForgeClientError> {
+    client.call("list_task_fields", args).await
+}
+
+pub fn use_list_task_fields(args: ListTaskFieldsInput) -> QueryState<Vec<TaskField>> {
+    use_forge_query("list_task_fields", args)
+}
+
+pub fn use_list_task_fields_live(args: ListTaskFieldsInput) -> SubscriptionState<Vec<TaskField>> {
+    use_forge_subscription("list_task_fields", args)
+}
 pub async fn list_tasks(client: &ForgeClient) -> Result<Vec<Task>, ForgeClientError> {
     client.call("list_tasks", ()).await
 }
@@ -51,6 +91,16 @@ pub fn use_list_tasks() -> QueryState<Vec<Task>> {
 pub fn use_list_tasks_live() -> SubscriptionState<Vec<Task>> {
     use_forge_subscription("list_tasks", ())
 }
+pub async fn create_field_definition(
+    client: &ForgeClient,
+    args: CreateFieldDefinitionInput,
+) -> Result<FieldDefinition, ForgeClientError> {
+    client.call("create_field_definition", args).await
+}
+
+pub fn use_create_field_definition() -> Mutation<CreateFieldDefinitionInput, FieldDefinition> {
+    use_forge_mutation("create_field_definition")
+}
 pub async fn create_task(
     client: &ForgeClient,
     args: CreateTaskInput,
@@ -60,6 +110,16 @@ pub async fn create_task(
 
 pub fn use_create_task() -> Mutation<CreateTaskInput, Task> {
     use_forge_mutation("create_task")
+}
+pub async fn delete_field_definition(
+    client: &ForgeClient,
+    args: DeleteFieldDefinitionInput,
+) -> Result<(), ForgeClientError> {
+    client.call("delete_field_definition", args).await
+}
+
+pub fn use_delete_field_definition() -> Mutation<DeleteFieldDefinitionInput, ()> {
+    use_forge_mutation("delete_field_definition")
 }
 pub async fn delete_task(
     client: &ForgeClient,
@@ -118,6 +178,16 @@ pub async fn register(
 pub fn use_register() -> Mutation<RegisterInput, AuthResponse> {
     use_forge_mutation("register")
 }
+pub async fn remove_task_field(
+    client: &ForgeClient,
+    args: RemoveTaskFieldInput,
+) -> Result<(), ForgeClientError> {
+    client.call("remove_task_field", args).await
+}
+
+pub fn use_remove_task_field() -> Mutation<RemoveTaskFieldInput, ()> {
+    use_forge_mutation("remove_task_field")
+}
 pub async fn reorder_task(
     client: &ForgeClient,
     args: ReorderTaskInput,
@@ -128,12 +198,32 @@ pub async fn reorder_task(
 pub fn use_reorder_task() -> Mutation<ReorderTaskInput, Task> {
     use_forge_mutation("reorder_task")
 }
+pub async fn set_task_field(
+    client: &ForgeClient,
+    args: SetTaskFieldInput,
+) -> Result<TaskField, ForgeClientError> {
+    client.call("set_task_field", args).await
+}
+
+pub fn use_set_task_field() -> Mutation<SetTaskFieldInput, TaskField> {
+    use_forge_mutation("set_task_field")
+}
 pub async fn unfocus_task(client: &ForgeClient) -> Result<Task, ForgeClientError> {
     client.call("unfocus_task", ()).await
 }
 
 pub fn use_unfocus_task() -> Mutation<(), Task> {
     use_forge_mutation("unfocus_task")
+}
+pub async fn update_field_definition(
+    client: &ForgeClient,
+    args: UpdateFieldDefinitionInput,
+) -> Result<FieldDefinition, ForgeClientError> {
+    client.call("update_field_definition", args).await
+}
+
+pub fn use_update_field_definition() -> Mutation<UpdateFieldDefinitionInput, FieldDefinition> {
+    use_forge_mutation("update_field_definition")
 }
 pub async fn update_task(
     client: &ForgeClient,

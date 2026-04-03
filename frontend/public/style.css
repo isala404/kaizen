@@ -312,6 +312,203 @@ a:hover {
   font-weight: 600;
 }
 
+/* === Field Filter Bar === */
+.field-filter-bar {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.filter-pill {
+  padding: 0.25rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background: color-mix(
+    in srgb,
+    var(--pill-color, var(--accent)) 8%,
+    transparent
+  );
+  color: color-mix(in srgb, var(--pill-color, var(--accent)) 50%, var(--text));
+  transition: all 0.15s;
+}
+
+.filter-pill:hover {
+  background: color-mix(
+    in srgb,
+    var(--pill-color, var(--accent)) 15%,
+    transparent
+  );
+}
+
+.filter-pill-active {
+  background: color-mix(
+    in srgb,
+    var(--pill-color, var(--accent)) 15%,
+    transparent
+  );
+  color: var(--pill-color, var(--accent));
+}
+
+.filter-pill-x {
+  font-size: 0.7rem;
+}
+
+/* === Field Pills (on cards) === */
+.field-pill-enum {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 500;
+  background: color-mix(
+    in srgb,
+    var(--pill-color, var(--accent)) 15%,
+    transparent
+  );
+  color: var(--pill-color, var(--accent));
+}
+
+.field-pill-bool {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.field-pill-number {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  background: var(--bg);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+}
+
+.field-pill-text {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* === Field Manager Panel === */
+.field-manager-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 420px;
+  background: var(--bg-raised);
+  border-left: 1px solid var(--border);
+  padding: 1.5rem;
+  overflow-y: auto;
+  z-index: 81;
+}
+
+.field-list {
+  margin-bottom: 1.5rem;
+}
+
+.field-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.field-list-key {
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
+.field-list-type {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  background: var(--bg-card);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+}
+
+.field-list-opts {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.field-select {
+  padding: 0.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.field-select:focus {
+  border-color: var(--accent);
+}
+
+.field-color-input {
+  width: 40px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+}
+
+.field-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+/* === Detail Panel Fields === */
+.detail-field-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+
+.detail-field-key {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  min-width: 80px;
+}
+
+.detail-field-input {
+  flex: 1;
+  padding: 0.3rem 0.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.82rem;
+  outline: none;
+}
+
+.detail-field-input:focus {
+  border-color: var(--accent);
+}
+
 /* === Board === */
 .board-columns {
   display: grid;

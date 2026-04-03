@@ -1,11 +1,14 @@
 use dioxus::prelude::*;
 
-use crate::forge::{Task, TaskStatus};
+use crate::components::FieldPills;
+use crate::forge::{FieldDefinition, Task, TaskField, TaskStatus};
 use crate::time_utils;
 
 #[component]
 pub fn TaskCard(
     task: Task,
+    field_defs: Option<Vec<FieldDefinition>>,
+    task_fields: Option<Vec<TaskField>>,
     selected: Option<bool>,
     on_select: EventHandler<String>,
     on_delete: EventHandler<String>,
@@ -22,6 +25,8 @@ pub fn TaskCard(
 
     let time_str = time_utils::format_duration(task.time_spent_secs);
     let rel_time = time_utils::relative_time(&task.created_at);
+
+    let has_fields = field_defs.is_some() && task_fields.is_some();
 
     rsx! {
         div { class: "{card_class}",
@@ -41,6 +46,13 @@ pub fn TaskCard(
                     span { class: "task-time", "{rel_time}" }
                     if !time_str.is_empty() {
                         span { class: "task-total-time", "{time_str}" }
+                    }
+                    if has_fields {
+                        FieldPills {
+                            task_id: task.id.clone(),
+                            fields: field_defs.clone().unwrap_or_default(),
+                            task_fields: task_fields.clone().unwrap_or_default(),
+                        }
                     }
                 }
             }

@@ -30,6 +30,35 @@ impl AuthResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreateFieldDefinitionInput {
+    pub key: String,
+    pub value_type: FieldValueType,
+    pub color: Option<String>,
+    pub options: Option<Vec<String>>,
+}
+
+impl CreateFieldDefinitionInput {
+    pub fn new(key: impl Into<String>, value_type: FieldValueType) -> Self {
+        Self {
+            key: key.into(),
+            value_type: value_type,
+            color: None,
+            options: None,
+        }
+    }
+
+    pub fn color(mut self, color: impl Into<String>) -> Self {
+        self.color = Some(color.into());
+        self
+    }
+
+    pub fn options(mut self, options: Vec<String>) -> Self {
+        self.options = Some(options);
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateTaskInput {
     pub title: String,
     pub description: Option<String>,
@@ -57,6 +86,17 @@ impl CreateTaskInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DeleteFieldDefinitionInput {
+    pub id: String,
+}
+
+impl DeleteFieldDefinitionInput {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self { id: id.into() }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeleteTaskInput {
     pub id: String,
 }
@@ -64,6 +104,50 @@ pub struct DeleteTaskInput {
 impl DeleteTaskInput {
     pub fn new(id: impl Into<String>) -> Self {
         Self { id: id.into() }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FieldDefinition {
+    pub id: String,
+    pub user_id: String,
+    pub key: String,
+    pub value_type: FieldValueType,
+    pub color: Option<String>,
+    pub options: Option<Vec<String>>,
+    pub position: i32,
+    pub created_at: String,
+}
+
+impl FieldDefinition {
+    pub fn new(
+        id: impl Into<String>,
+        user_id: impl Into<String>,
+        key: impl Into<String>,
+        value_type: FieldValueType,
+        position: i32,
+        created_at: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            user_id: user_id.into(),
+            key: key.into(),
+            value_type: value_type,
+            position: position,
+            created_at: created_at.into(),
+            color: None,
+            options: None,
+        }
+    }
+
+    pub fn color(mut self, color: impl Into<String>) -> Self {
+        self.color = Some(color.into());
+        self
+    }
+
+    pub fn options(mut self, options: Vec<String>) -> Self {
+        self.options = Some(options);
+        self
     }
 }
 
@@ -86,6 +170,19 @@ pub struct GetTaskInput {
 impl GetTaskInput {
     pub fn new(id: impl Into<String>) -> Self {
         Self { id: id.into() }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ListTaskFieldsInput {
+    pub task_id: String,
+}
+
+impl ListTaskFieldsInput {
+    pub fn new(task_id: impl Into<String>) -> Self {
+        Self {
+            task_id: task_id.into(),
+        }
     }
 }
 
@@ -184,6 +281,21 @@ impl RegisterInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RemoveTaskFieldInput {
+    pub task_id: String,
+    pub field_id: String,
+}
+
+impl RemoveTaskFieldInput {
+    pub fn new(task_id: impl Into<String>, field_id: impl Into<String>) -> Self {
+        Self {
+            task_id: task_id.into(),
+            field_id: field_id.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReorderTaskInput {
     pub id: String,
     pub status: TaskStatus,
@@ -196,6 +308,27 @@ impl ReorderTaskInput {
             id: id.into(),
             status: status,
             position: position,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SetTaskFieldInput {
+    pub task_id: String,
+    pub field_id: String,
+    pub value: String,
+}
+
+impl SetTaskFieldInput {
+    pub fn new(
+        task_id: impl Into<String>,
+        field_id: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Self {
+        Self {
+            task_id: task_id.into(),
+            field_id: field_id.into(),
+            value: value.into(),
         }
     }
 }
@@ -242,6 +375,71 @@ impl Task {
 
     pub fn due_at(mut self, due_at: impl Into<String>) -> Self {
         self.due_at = Some(due_at.into());
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TaskField {
+    pub id: String,
+    pub task_id: String,
+    pub field_id: String,
+    pub value: String,
+}
+
+impl TaskField {
+    pub fn new(
+        id: impl Into<String>,
+        task_id: impl Into<String>,
+        field_id: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            task_id: task_id.into(),
+            field_id: field_id.into(),
+            value: value.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UpdateFieldDefinitionInput {
+    pub id: String,
+    pub key: Option<String>,
+    pub color: Option<String>,
+    pub options: Option<Vec<String>>,
+    pub position: Option<i32>,
+}
+
+impl UpdateFieldDefinitionInput {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            key: None,
+            color: None,
+            options: None,
+            position: None,
+        }
+    }
+
+    pub fn key(mut self, key: impl Into<String>) -> Self {
+        self.key = Some(key.into());
+        self
+    }
+
+    pub fn color(mut self, color: impl Into<String>) -> Self {
+        self.color = Some(color.into());
+        self
+    }
+
+    pub fn options(mut self, options: Vec<String>) -> Self {
+        self.options = Some(options);
+        self
+    }
+
+    pub fn position(mut self, position: i32) -> Self {
+        self.position = Some(position);
         self
     }
 }
@@ -332,6 +530,16 @@ impl Viewer {
             email: email.into(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FieldValueType {
+    Text,
+    Enum,
+    Bool,
+    Int,
+    Decimal,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
