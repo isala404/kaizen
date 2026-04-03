@@ -1,12 +1,13 @@
+mod components;
 mod forge;
 mod layout;
 mod pages;
 
 use dioxus::prelude::*;
-use forge_dioxus::ForgeProvider;
+use forge::{ForgeAuthProvider, use_auth_key};
 
-use layout::AppLayout;
-use pages::{About, Home, NotFound};
+use layout::ProtectedLayout;
+use pages::{Dashboard, Login, NotFound};
 
 fn api_url() -> &'static str {
     option_env!("FORGE_API_URL").unwrap_or("http://localhost:9081")
@@ -15,11 +16,11 @@ fn api_url() -> &'static str {
 #[derive(Routable, Clone)]
 #[rustfmt::skip]
 enum Route {
-    #[layout(AppLayout)]
+    #[route("/login")]
+    Login {},
+    #[layout(ProtectedLayout)]
         #[route("/")]
-        Home {},
-        #[route("/about")]
-        About {},
+        Dashboard {},
     #[end_layout]
     #[route("/:..segments")]
     NotFound { segments: Vec<String> },
@@ -34,8 +35,20 @@ fn App() -> Element {
     rsx! {
         document::Title { "kaizen" }
         document::Stylesheet { href: asset!("/public/style.css") }
-        ForgeProvider {
+        ForgeAuthProvider {
             url: api_url().to_string(),
+            app_name: "kaizen".to_string(),
+            refresh_interval_secs: 2400,
+            AppShell {}
+        }
+    }
+}
+
+#[component]
+fn AppShell() -> Element {
+    let auth_key = use_auth_key();
+    rsx! {
+        main { key: "{auth_key}",
             Router::<Route> {}
         }
     }

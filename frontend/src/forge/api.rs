@@ -17,3 +17,131 @@ use super::types::*;
 use super::{
     use_forge_job, use_forge_mutation, use_forge_query, use_forge_subscription, use_forge_workflow,
 };
+
+pub async fn get_me(client: &ForgeClient) -> Result<Viewer, ForgeClientError> {
+    client.call("get_me", ()).await
+}
+
+pub fn use_get_me() -> QueryState<Viewer> {
+    use_forge_query("get_me", ())
+}
+
+pub fn use_get_me_live() -> SubscriptionState<Viewer> {
+    use_forge_subscription("get_me", ())
+}
+pub async fn get_task(client: &ForgeClient, args: GetTaskInput) -> Result<Task, ForgeClientError> {
+    client.call("get_task", args).await
+}
+
+pub fn use_get_task(args: GetTaskInput) -> QueryState<Task> {
+    use_forge_query("get_task", args)
+}
+
+pub fn use_get_task_live(args: GetTaskInput) -> SubscriptionState<Task> {
+    use_forge_subscription("get_task", args)
+}
+pub async fn list_tasks(client: &ForgeClient) -> Result<Vec<Task>, ForgeClientError> {
+    client.call("list_tasks", ()).await
+}
+
+pub fn use_list_tasks() -> QueryState<Vec<Task>> {
+    use_forge_query("list_tasks", ())
+}
+
+pub fn use_list_tasks_live() -> SubscriptionState<Vec<Task>> {
+    use_forge_subscription("list_tasks", ())
+}
+pub async fn create_task(
+    client: &ForgeClient,
+    args: CreateTaskInput,
+) -> Result<Task, ForgeClientError> {
+    client.call("create_task", args).await
+}
+
+pub fn use_create_task() -> Mutation<CreateTaskInput, Task> {
+    use_forge_mutation("create_task")
+}
+pub async fn delete_task(
+    client: &ForgeClient,
+    args: DeleteTaskInput,
+) -> Result<(), ForgeClientError> {
+    client.call("delete_task", args).await
+}
+
+pub fn use_delete_task() -> Mutation<DeleteTaskInput, ()> {
+    use_forge_mutation("delete_task")
+}
+pub async fn focus_task(
+    client: &ForgeClient,
+    args: FocusTaskInput,
+) -> Result<Task, ForgeClientError> {
+    client.call("focus_task", args).await
+}
+
+pub fn use_focus_task() -> Mutation<FocusTaskInput, Task> {
+    use_forge_mutation("focus_task")
+}
+pub async fn login(
+    client: &ForgeClient,
+    args: LoginInput,
+) -> Result<AuthResponse, ForgeClientError> {
+    client.call("login", args).await
+}
+
+pub fn use_login() -> Mutation<LoginInput, AuthResponse> {
+    use_forge_mutation("login")
+}
+pub async fn logout(client: &ForgeClient, args: LogoutInput) -> Result<(), ForgeClientError> {
+    client.call("logout", args).await
+}
+
+pub fn use_logout() -> Mutation<LogoutInput, ()> {
+    use_forge_mutation("logout")
+}
+pub async fn refresh(
+    client: &ForgeClient,
+    args: RefreshInput,
+) -> Result<RefreshResponse, ForgeClientError> {
+    client.call("refresh", args).await
+}
+
+pub fn use_refresh() -> Mutation<RefreshInput, RefreshResponse> {
+    use_forge_mutation("refresh")
+}
+pub async fn register(
+    client: &ForgeClient,
+    args: RegisterInput,
+) -> Result<AuthResponse, ForgeClientError> {
+    client.call("register", args).await
+}
+
+pub fn use_register() -> Mutation<RegisterInput, AuthResponse> {
+    use_forge_mutation("register")
+}
+pub async fn reorder_task(
+    client: &ForgeClient,
+    args: ReorderTaskInput,
+) -> Result<Task, ForgeClientError> {
+    client.call("reorder_task", args).await
+}
+
+pub fn use_reorder_task() -> Mutation<ReorderTaskInput, Task> {
+    use_forge_mutation("reorder_task")
+}
+pub async fn unfocus_task(client: &ForgeClient) -> Result<Task, ForgeClientError> {
+    client.call("unfocus_task", ()).await
+}
+
+pub fn use_unfocus_task() -> Mutation<(), Task> {
+    use_forge_mutation("unfocus_task")
+}
+pub async fn update_task(
+    client: &ForgeClient,
+    args: UpdateTaskInput,
+) -> Result<Task, ForgeClientError> {
+    client.call("update_task", args).await
+}
+
+pub fn use_update_task() -> Mutation<UpdateTaskInput, Task> {
+    use_forge_mutation("update_task")
+}

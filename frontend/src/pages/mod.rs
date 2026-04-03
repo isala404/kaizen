@@ -1,7 +1,7 @@
-mod about;
-mod home;
+pub mod dashboard;
+mod login;
 mod not_found;
 
-pub use about::About;
-pub use home::Home;
+pub use dashboard::Dashboard;
+pub use login::Login;
 pub use not_found::NotFound;

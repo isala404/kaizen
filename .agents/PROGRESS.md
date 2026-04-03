@@ -1,0 +1,14 @@
+Phase 1 complete: Auth + Data Model + CRUD + Board UI
+- Migration 0001: users table, task_status enum, tasks table with reactivity
+- Auth: register, login, refresh, logout, get_me (unscoped since user IS the row)
+- Tasks: list, get, create, update, delete, focus, unfocus, reorder
+- Frontend: login page, dashboard with 5-column board, focus dock, detail panel, mobile layout
+- 9 unit tests passing (data layer tests via pool, not handler tests)
+- forge check passing clean
+- WORKAROUND: #[forge::model] strips derives so we use plain #[derive(sqlx::FromRow, Serialize, Deserialize)] instead
+- WORKAROUND: TestMutationContext can't call handlers (no conn()/issue_token_pair()), so unit tests hit DB directly
+- TODO: Playwright tests written but not yet run (need dx serve + backend running together)
+- TODO: Phase 2 - drag-and-drop, live timer, keyboard shortcuts
+- TODO: Phase 3 - field definitions + task fields
+- TODO: Phase 4 - touch gestures
+- TODO: Phase 5 - attachments + polish

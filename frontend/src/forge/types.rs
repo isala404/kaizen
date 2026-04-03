@@ -8,3 +8,340 @@
 )]
 
 use serde::{Deserialize, Serialize};
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AuthResponse {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub viewer: Viewer,
+}
+
+impl AuthResponse {
+    pub fn new(
+        access_token: impl Into<String>,
+        refresh_token: impl Into<String>,
+        viewer: Viewer,
+    ) -> Self {
+        Self {
+            access_token: access_token.into(),
+            refresh_token: refresh_token.into(),
+            viewer: viewer,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreateTaskInput {
+    pub title: String,
+    pub description: Option<String>,
+    pub status: Option<TaskStatus>,
+}
+
+impl CreateTaskInput {
+    pub fn new(title: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            description: None,
+            status: None,
+        }
+    }
+
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    pub fn status(mut self, status: TaskStatus) -> Self {
+        self.status = Some(status);
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DeleteTaskInput {
+    pub id: String,
+}
+
+impl DeleteTaskInput {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self { id: id.into() }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FocusTaskInput {
+    pub id: String,
+}
+
+impl FocusTaskInput {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self { id: id.into() }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GetTaskInput {
+    pub id: String,
+}
+
+impl GetTaskInput {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self { id: id.into() }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LoginInput {
+    pub email: String,
+    pub password: String,
+}
+
+impl LoginInput {
+    pub fn new(email: impl Into<String>, password: impl Into<String>) -> Self {
+        Self {
+            email: email.into(),
+            password: password.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LogoutInput {
+    pub refresh_token: String,
+}
+
+impl LogoutInput {
+    pub fn new(refresh_token: impl Into<String>) -> Self {
+        Self {
+            refresh_token: refresh_token.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PublicUser {
+    pub id: String,
+    pub email: String,
+    pub name: String,
+}
+
+impl PublicUser {
+    pub fn new(id: impl Into<String>, email: impl Into<String>, name: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            email: email.into(),
+            name: name.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RefreshInput {
+    pub refresh_token: String,
+}
+
+impl RefreshInput {
+    pub fn new(refresh_token: impl Into<String>) -> Self {
+        Self {
+            refresh_token: refresh_token.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RefreshResponse {
+    pub access_token: String,
+    pub refresh_token: String,
+}
+
+impl RefreshResponse {
+    pub fn new(access_token: impl Into<String>, refresh_token: impl Into<String>) -> Self {
+        Self {
+            access_token: access_token.into(),
+            refresh_token: refresh_token.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RegisterInput {
+    pub name: String,
+    pub email: String,
+    pub password: String,
+}
+
+impl RegisterInput {
+    pub fn new(
+        name: impl Into<String>,
+        email: impl Into<String>,
+        password: impl Into<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            email: email.into(),
+            password: password.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReorderTaskInput {
+    pub id: String,
+    pub status: TaskStatus,
+    pub position: i32,
+}
+
+impl ReorderTaskInput {
+    pub fn new(id: impl Into<String>, status: TaskStatus, position: i32) -> Self {
+        Self {
+            id: id.into(),
+            status: status,
+            position: position,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Task {
+    pub id: String,
+    pub user_id: String,
+    pub title: String,
+    pub description: String,
+    pub status: TaskStatus,
+    pub time_spent_secs: i64,
+    pub position: i32,
+    pub due_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl Task {
+    pub fn new(
+        id: impl Into<String>,
+        user_id: impl Into<String>,
+        title: impl Into<String>,
+        description: impl Into<String>,
+        status: TaskStatus,
+        time_spent_secs: i64,
+        position: i32,
+        created_at: impl Into<String>,
+        updated_at: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            user_id: user_id.into(),
+            title: title.into(),
+            description: description.into(),
+            status: status,
+            time_spent_secs: time_spent_secs,
+            position: position,
+            created_at: created_at.into(),
+            updated_at: updated_at.into(),
+            due_at: None,
+        }
+    }
+
+    pub fn due_at(mut self, due_at: impl Into<String>) -> Self {
+        self.due_at = Some(due_at.into());
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UpdateTaskInput {
+    pub id: String,
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub status: Option<TaskStatus>,
+    pub due_at: Option<Option<String>>,
+}
+
+impl UpdateTaskInput {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            title: None,
+            description: None,
+            status: None,
+            due_at: None,
+        }
+    }
+
+    pub fn title(mut self, title: impl Into<String>) -> Self {
+        self.title = Some(title.into());
+        self
+    }
+
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    pub fn status(mut self, status: TaskStatus) -> Self {
+        self.status = Some(status);
+        self
+    }
+
+    pub fn due_at(mut self, due_at: Option<String>) -> Self {
+        self.due_at = Some(due_at);
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct User {
+    pub id: String,
+    pub email: String,
+    pub name: String,
+    pub password_hash: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl User {
+    pub fn new(
+        id: impl Into<String>,
+        email: impl Into<String>,
+        name: impl Into<String>,
+        password_hash: impl Into<String>,
+        created_at: impl Into<String>,
+        updated_at: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            email: email.into(),
+            name: name.into(),
+            password_hash: password_hash.into(),
+            created_at: created_at.into(),
+            updated_at: updated_at.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Viewer {
+    pub id: String,
+    pub name: String,
+    pub email: String,
+}
+
+impl Viewer {
+    pub fn new(id: impl Into<String>, name: impl Into<String>, email: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            name: name.into(),
+            email: email.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskStatus {
+    Inbox,
+    UpNext,
+    InProgress,
+    Focused,
+    Paused,
+    Done,
+    Archived,
+}

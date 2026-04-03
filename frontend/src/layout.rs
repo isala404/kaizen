@@ -1,23 +1,17 @@
 use dioxus::prelude::*;
 
 use crate::Route;
+use crate::forge::use_require_auth;
 
 #[component]
-pub fn AppLayout() -> Element {
+pub fn ProtectedLayout() -> Element {
+    if !use_require_auth("/login") {
+        return rsx! {
+            div { class: "loading", "Loading..." }
+        };
+    }
+
     rsx! {
-        div { class: "app-layout",
-            nav { class: "app-nav",
-                div { class: "app-nav-inner",
-                    Link { to: Route::Home {}, class: "nav-brand", "kaizen" }
-                    div { class: "nav-links",
-                        Link { to: Route::Home {}, class: "nav-link", "Home" }
-                        Link { to: Route::About {}, class: "nav-link", "About" }
-                    }
-                }
-            }
-            main { class: "app-main",
-                Outlet::<Route> {}
-            }
-        }
+        Outlet::<Route> {}
     }
 }

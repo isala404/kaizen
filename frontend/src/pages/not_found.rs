@@ -12,7 +12,7 @@ pub fn NotFound(segments: Vec<String>) -> Element {
                 "Nothing here at "
                 code { "{path}" }
             }
-            Link { to: Route::Home {}, "Go home" }
+            Link { to: Route::Dashboard {}, "Go home" }
         }
     }
 }
