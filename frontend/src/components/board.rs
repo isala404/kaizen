@@ -28,6 +28,7 @@ pub fn Board(
     on_drag_end: EventHandler<()>,
     on_drop: EventHandler<DropTarget>,
 ) -> Element {
+    let total = tasks.len();
     rsx! {
         div { class: "section-label", "BOARD" }
         div { class: "board-columns",
@@ -36,6 +37,7 @@ pub fn Board(
                     key: "{label}",
                     label: label.to_string(),
                     status: status.clone(),
+                    total_task_count: total,
                     is_focused: focused_col == Some(i),
                     focused_row: if focused_col == Some(i) { focused_row } else { None },
                     tasks: tasks.iter()

@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::components::{
     ActiveFilters, Board, DetailPanel, DropTarget, FieldFilterBar, FieldManager, FocusDock, Header,
-    QuickCapture, StatusChange, StatusTabs, TaskList,
+    QuickCapture, StatusChange, StatusTabs, TaskList, UndoAction, UndoToast,
 };
 use crate::forge::{
     CreateTaskInput, DeleteTaskInput, FieldDefinition, FocusTaskInput, ReorderTaskInput, Task,
@@ -35,6 +35,7 @@ pub fn Dashboard() -> Element {
     let mut selected_task_id = use_signal(|| Option::<String>::None);
     let mut show_capture = use_signal(|| false);
     let mut dragging_id = use_signal(|| Option::<String>::None);
+    let mut undo_action = use_signal(|| Option::<UndoAction>::None);
     let mut active_tab = use_signal(|| TaskStatus::Inbox);
     let mut focused_col = use_signal(|| Option::<usize>::None);
     let mut focused_row = use_signal(|| Option::<usize>::None);
@@ -109,10 +110,29 @@ pub fn Dashboard() -> Element {
 
     let on_delete = {
         let delete = delete.clone();
+        let tasks_for_delete = tasks.clone();
         move |id: String| {
+            // Show undo toast, delay actual delete by 5 seconds
+            let task_title = tasks_for_delete
+                .iter()
+                .find(|t| t.id == id)
+                .map(|t| t.title.clone())
+                .unwrap_or_default();
+
+            undo_action.set(Some(UndoAction {
+                label: format!("\"{}\" deleted", task_title),
+                task_id: id.clone(),
+            }));
+
             let delete = delete.clone();
             spawn(async move {
-                let _ = delete.call(DeleteTaskInput::new(id)).await;
+                // Wait 5 seconds, then delete if undo wasn't triggered
+                gloo_timers::future::TimeoutFuture::new(5_000).await;
+                let current = undo_action.read().clone();
+                if current.as_ref().is_some_and(|a| a.task_id == id) {
+                    undo_action.set(None);
+                    let _ = delete.call(DeleteTaskInput::new(id)).await;
+                }
             });
         }
     };
@@ -424,6 +444,13 @@ pub fn Dashboard() -> Element {
                 FieldManager {
                     on_close: move |_| show_field_manager.set(false),
                 }
+            }
+
+            UndoToast {
+                action: undo_action.read().clone(),
+                on_undo: move |_task_id: String| {
+                    undo_action.set(None);
+                },
             }
         }
     }

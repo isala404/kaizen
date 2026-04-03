@@ -9,6 +9,45 @@
 
 use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Attachment {
+    pub id: String,
+    pub task_id: String,
+    pub user_id: String,
+    pub filename: String,
+    pub content_type: String,
+    pub size_bytes: i64,
+    pub storage_key: String,
+    pub display: AttachmentDisplay,
+    pub created_at: String,
+}
+
+impl Attachment {
+    pub fn new(
+        id: impl Into<String>,
+        task_id: impl Into<String>,
+        user_id: impl Into<String>,
+        filename: impl Into<String>,
+        content_type: impl Into<String>,
+        size_bytes: i64,
+        storage_key: impl Into<String>,
+        display: AttachmentDisplay,
+        created_at: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            task_id: task_id.into(),
+            user_id: user_id.into(),
+            filename: filename.into(),
+            content_type: content_type.into(),
+            size_bytes: size_bytes,
+            storage_key: storage_key.into(),
+            display: display,
+            created_at: created_at.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AuthResponse {
     pub access_token: String,
     pub refresh_token: String,
@@ -25,6 +64,30 @@ impl AuthResponse {
             access_token: access_token.into(),
             refresh_token: refresh_token.into(),
             viewer: viewer,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreateAttachmentInput {
+    pub task_id: String,
+    pub filename: String,
+    pub content_type: String,
+    pub size_bytes: i64,
+}
+
+impl CreateAttachmentInput {
+    pub fn new(
+        task_id: impl Into<String>,
+        filename: impl Into<String>,
+        content_type: impl Into<String>,
+        size_bytes: i64,
+    ) -> Self {
+        Self {
+            task_id: task_id.into(),
+            filename: filename.into(),
+            content_type: content_type.into(),
+            size_bytes: size_bytes,
         }
     }
 }
@@ -82,6 +145,17 @@ impl CreateTaskInput {
     pub fn status(mut self, status: TaskStatus) -> Self {
         self.status = Some(status);
         self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DeleteAttachmentInput {
+    pub id: String,
+}
+
+impl DeleteAttachmentInput {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self { id: id.into() }
     }
 }
 
@@ -170,6 +244,19 @@ pub struct GetTaskInput {
 impl GetTaskInput {
     pub fn new(id: impl Into<String>) -> Self {
         Self { id: id.into() }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ListAttachmentsInput {
+    pub task_id: String,
+}
+
+impl ListAttachmentsInput {
+    pub fn new(task_id: impl Into<String>) -> Self {
+        Self {
+            task_id: task_id.into(),
+        }
     }
 }
 
@@ -530,6 +617,13 @@ impl Viewer {
             email: email.into(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AttachmentDisplay {
+    Inline,
+    Attached,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

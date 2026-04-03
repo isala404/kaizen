@@ -25,8 +25,10 @@ pub use task_card::TaskCard;
 pub use task_list::TaskList;
 
 mod swipeable_card;
+mod undo_toast;
 
 pub use swipeable_card::SwipeableCard;
+pub use undo_toast::{UndoAction, UndoToast};
 
 use crate::forge::TaskStatus;
 

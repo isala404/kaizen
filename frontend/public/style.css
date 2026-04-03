@@ -575,6 +575,52 @@ a:hover {
   justify-content: flex-end;
 }
 
+/* === Undo Toast === */
+.undo-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  color: var(--text);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  animation: toast-in 0.15s ease-out;
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateX(-50%) translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
+.undo-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+@media (max-width: 700px), (pointer: coarse) {
+  .undo-toast {
+    bottom: 5rem;
+  }
+}
+
 /* === Board === */
 .board-columns {
   display: grid;
@@ -602,7 +648,12 @@ a:hover {
   background: var(--bg-raised);
 }
 
+.board-column-collapsed {
+  min-height: auto;
+}
+
 .column-header {
+  cursor: pointer;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -659,6 +710,22 @@ a:hover {
 .board-column:hover .column-add-btn {
   opacity: 0.6;
 }
+.column-show-previous {
+  width: 100%;
+  padding: 0.4rem;
+  margin-top: 0.3rem;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.column-show-previous:hover {
+  color: var(--text-muted);
+}
+
 .column-add-btn:hover {
   opacity: 1 !important;
   border-color: var(--border);

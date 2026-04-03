@@ -53,6 +53,20 @@ pub fn use_list_all_task_fields() -> QueryState<Vec<TaskField>> {
 pub fn use_list_all_task_fields_live() -> SubscriptionState<Vec<TaskField>> {
     use_forge_subscription("list_all_task_fields", ())
 }
+pub async fn list_attachments(
+    client: &ForgeClient,
+    args: ListAttachmentsInput,
+) -> Result<Vec<Attachment>, ForgeClientError> {
+    client.call("list_attachments", args).await
+}
+
+pub fn use_list_attachments(args: ListAttachmentsInput) -> QueryState<Vec<Attachment>> {
+    use_forge_query("list_attachments", args)
+}
+
+pub fn use_list_attachments_live(args: ListAttachmentsInput) -> SubscriptionState<Vec<Attachment>> {
+    use_forge_subscription("list_attachments", args)
+}
 pub async fn list_field_definitions(
     client: &ForgeClient,
 ) -> Result<Vec<FieldDefinition>, ForgeClientError> {
@@ -91,6 +105,16 @@ pub fn use_list_tasks() -> QueryState<Vec<Task>> {
 pub fn use_list_tasks_live() -> SubscriptionState<Vec<Task>> {
     use_forge_subscription("list_tasks", ())
 }
+pub async fn create_attachment(
+    client: &ForgeClient,
+    args: CreateAttachmentInput,
+) -> Result<Attachment, ForgeClientError> {
+    client.call("create_attachment", args).await
+}
+
+pub fn use_create_attachment() -> Mutation<CreateAttachmentInput, Attachment> {
+    use_forge_mutation("create_attachment")
+}
 pub async fn create_field_definition(
     client: &ForgeClient,
     args: CreateFieldDefinitionInput,
@@ -110,6 +134,16 @@ pub async fn create_task(
 
 pub fn use_create_task() -> Mutation<CreateTaskInput, Task> {
     use_forge_mutation("create_task")
+}
+pub async fn delete_attachment(
+    client: &ForgeClient,
+    args: DeleteAttachmentInput,
+) -> Result<(), ForgeClientError> {
+    client.call("delete_attachment", args).await
+}
+
+pub fn use_delete_attachment() -> Mutation<DeleteAttachmentInput, ()> {
+    use_forge_mutation("delete_attachment")
 }
 pub async fn delete_field_definition(
     client: &ForgeClient,
