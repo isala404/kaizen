@@ -193,18 +193,16 @@ pub fn Dashboard() -> Element {
             let drag_id = dragging_id.read().clone();
             dragging_id.set(None);
             if let Some(task_id) = drag_id {
-                if task_id != target.task_id {
-                    let reorder = reorder.clone();
-                    spawn(async move {
-                        let _ = reorder
-                            .call(ReorderTaskInput::new(
-                                task_id,
-                                target.status,
-                                target.position,
-                            ))
-                            .await;
-                    });
-                }
+                let reorder = reorder.clone();
+                spawn(async move {
+                    let _ = reorder
+                        .call(ReorderTaskInput::new(
+                            task_id,
+                            target.status,
+                            target.position,
+                        ))
+                        .await;
+                });
             }
         }
     };

@@ -105,13 +105,10 @@ pub fn BoardColumn(
                 move |e: Event<DragData>| {
                     e.prevent_default();
                     drag_over.set(false);
-                    if let Some(ref did) = dragging_id {
-                        on_drop.call(DropTarget {
-                            task_id: did.clone(),
-                            status: status.clone(),
-                            position: end_position,
-                        });
-                    }
+                    on_drop.call(DropTarget {
+                        status: status.clone(),
+                        position: end_position,
+                    });
                 }
             },
             div {

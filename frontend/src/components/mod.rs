@@ -46,7 +46,6 @@ pub struct DragPayload {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DropTarget {
-    pub task_id: String,
     pub status: TaskStatus,
     pub position: i32,
 }
