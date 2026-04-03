@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "forge-idiomatic-engineer": {
+      "source": "isala404/forge",
+      "ref": "main",
+      "sourceType": "github",
+      "computedHash": "b6df324f9279af17f0322dd2b4c1d0eaceaeb9a55595be3e59cb46e5cb21e745"
+    }
+  }
+}
