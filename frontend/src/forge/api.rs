@@ -242,11 +242,14 @@ pub async fn set_task_field(
 pub fn use_set_task_field() -> Mutation<SetTaskFieldInput, TaskField> {
     use_forge_mutation("set_task_field")
 }
-pub async fn unfocus_task(client: &ForgeClient) -> Result<Task, ForgeClientError> {
-    client.call("unfocus_task", ()).await
+pub async fn unfocus_task(
+    client: &ForgeClient,
+    args: UnfocusTaskInput,
+) -> Result<Task, ForgeClientError> {
+    client.call("unfocus_task", args).await
 }
 
-pub fn use_unfocus_task() -> Mutation<(), Task> {
+pub fn use_unfocus_task() -> Mutation<UnfocusTaskInput, Task> {
     use_forge_mutation("unfocus_task")
 }
 pub async fn update_field_definition(

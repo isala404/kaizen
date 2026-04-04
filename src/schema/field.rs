@@ -9,6 +9,8 @@ pub enum FieldValueType {
     Bool,
     Int,
     Decimal,
+    List,
+    Url,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]

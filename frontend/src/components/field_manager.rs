@@ -30,13 +30,11 @@ pub fn FieldManager(on_close: EventHandler<()>) -> Element {
                 "bool" => FieldValueType::Bool,
                 "int" => FieldValueType::Int,
                 "decimal" => FieldValueType::Decimal,
+                "list" => FieldValueType::List,
+                "url" => FieldValueType::Url,
                 _ => FieldValueType::Text,
             };
-            let color = if vt == FieldValueType::Enum {
-                Some(new_color.read().clone())
-            } else {
-                None
-            };
+            let color = Some(new_color.read().clone());
             let options = if vt == FieldValueType::Enum {
                 let opts: Vec<String> = new_options
                     .read()
@@ -123,6 +121,8 @@ pub fn FieldManager(on_close: EventHandler<()>) -> Element {
                     option { value: "bool", "Boolean" }
                     option { value: "int", "Integer" }
                     option { value: "decimal", "Decimal" }
+                    option { value: "list", "List" }
+                    option { value: "url", "URL" }
                 }
                 if *new_type.read() == "enum" {
                     input {
@@ -131,12 +131,12 @@ pub fn FieldManager(on_close: EventHandler<()>) -> Element {
                         value: "{new_options}",
                         oninput: move |e| new_options.set(e.value()),
                     }
-                    input {
-                        class: "field-color-input",
-                        r#type: "color",
-                        value: "{new_color}",
-                        oninput: move |e| new_color.set(e.value()),
-                    }
+                }
+                input {
+                    class: "field-color-input",
+                    r#type: "color",
+                    value: "{new_color}",
+                    oninput: move |e| new_color.set(e.value()),
                 }
                 button {
                     class: "login-button",
@@ -155,5 +155,7 @@ fn format_type(vt: &FieldValueType) -> &'static str {
         FieldValueType::Bool => "bool",
         FieldValueType::Int => "int",
         FieldValueType::Decimal => "decimal",
+        FieldValueType::List => "list",
+        FieldValueType::Url => "url",
     }
 }

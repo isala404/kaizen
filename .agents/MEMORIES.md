@@ -13,8 +13,12 @@ Project Shape
 - Auth: JWT HS256, register/login/refresh/logout + get_me
 - Models: User (pub(crate) to avoid password_hash leak), Task with TaskStatus enum
 - Functions: auth.rs (5 handlers), tasks.rs (8 handlers including focus/unfocus/reorder)
-- Frontend: Login page, Dashboard with board (5 columns), focus dock, detail panel
+- Frontend: Login page, Dashboard with horizontal focus dock + 4-column board, detail panel
 - Mobile: status tabs, task list, FAB, focus bar
+- Removed: drag-and-drop, field filter bar, field pills on cards, time filter pills, play/pause buttons
+- Focus dock: click card to toggle focus (start/pause timer), equal-width cards
+- Board cards: title + contextual subtitle + optional color bar from enum fields
+- Detail panel: no status section, fields/due/time/description only
 - `auto_register()` enabled in main.rs
 - Build.rs handles frontend: placeholder in dev, dx build in release
 

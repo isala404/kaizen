@@ -183,7 +183,7 @@ pub async fn focus_task(ctx: &MutationContext, input: FocusTaskInput) -> Result<
     let now = Utc::now();
     let mut conn = ctx.conn().await?;
 
-    // Defocus the currently focused task, if any
+    // Defocus the currently focused task (stays in focus area as in_progress)
     let focused = sqlx::query_as::<_, Task>(
         "SELECT id, user_id, title, description, status, time_spent_secs,
                 position, due_at, created_at, updated_at
@@ -195,7 +195,6 @@ pub async fn focus_task(ctx: &MutationContext, input: FocusTaskInput) -> Result<
 
     if let Some(prev) = focused {
         if prev.id == input.id {
-            // Already focused, just return it
             return Ok(prev);
         }
         let elapsed = (now - prev.updated_at).num_seconds().max(0);
@@ -229,26 +228,37 @@ pub async fn focus_task(ctx: &MutationContext, input: FocusTaskInput) -> Result<
     Ok(task)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnfocusTaskInput {
+    pub id: Uuid,
+}
+
 #[forge::mutation]
-pub async fn unfocus_task(ctx: &MutationContext) -> Result<Task> {
+pub async fn unfocus_task(ctx: &MutationContext, input: UnfocusTaskInput) -> Result<Task> {
     let user_id = ctx.user_id()?;
     let now = Utc::now();
     let mut conn = ctx.conn().await?;
 
-    let focused = sqlx::query_as::<_, Task>(
+    let task = sqlx::query_as::<_, Task>(
         "SELECT id, user_id, title, description, status, time_spent_secs,
                 position, due_at, created_at, updated_at
-         FROM tasks WHERE user_id = $1 AND status = 'focused'",
+         FROM tasks WHERE id = $1 AND user_id = $2",
     )
+    .bind(input.id)
     .bind(user_id)
     .fetch_optional(&mut conn)
     .await?
-    .ok_or_else(|| ForgeError::NotFound("No focused task".into()))?;
+    .ok_or_else(|| ForgeError::NotFound("Task not found".into()))?;
 
-    let elapsed = (now - focused.updated_at).num_seconds().max(0);
-    let new_time = focused.time_spent_secs + elapsed;
+    // Only accumulate timer if the task was actively focused
+    let new_time = if task.status == TaskStatus::Focused {
+        let elapsed = (now - task.updated_at).num_seconds().max(0);
+        task.time_spent_secs + elapsed
+    } else {
+        task.time_spent_secs
+    };
 
-    let task = sqlx::query_as::<_, Task>(
+    let result = sqlx::query_as::<_, Task>(
         "UPDATE tasks SET status = 'in_progress', time_spent_secs = $1, updated_at = $2
          WHERE id = $3
          RETURNING id, user_id, title, description, status, time_spent_secs,
@@ -256,11 +266,11 @@ pub async fn unfocus_task(ctx: &MutationContext) -> Result<Task> {
     )
     .bind(new_time)
     .bind(now)
-    .bind(focused.id)
+    .bind(input.id)
     .fetch_one(&mut conn)
     .await?;
 
-    Ok(task)
+    Ok(result)
 }
 
 #[forge::mutation]
@@ -478,7 +488,7 @@ mod tests {
         assert_eq!(focused.len(), 1);
         assert_eq!(focused[0].id, t2.id);
 
-        // Verify t1 is in_progress
+        // Verify t1 is in_progress (stays in focus area)
         let t1_status = sqlx::query_as::<_, Task>(
             "SELECT id, user_id, title, description, status, time_spent_secs,
                     position, due_at, created_at, updated_at

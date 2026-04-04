@@ -1,28 +1,26 @@
 use dioxus::prelude::*;
 
 use crate::components::{
-    ActiveFilters, Board, DetailPanel, DropTarget, FieldFilterBar, FieldManager, FocusDock, Header,
-    QuickCapture, StatusChange, StatusTabs, TaskList, UndoAction, UndoToast,
+    Board, DetailPanel, DropTarget, FieldManager, FocusDock, Header, QuickCapture, StatusChange,
+    StatusTabs, TaskList, UndoAction, UndoToast,
 };
 use crate::forge::{
     CreateTaskInput, DeleteTaskInput, FieldDefinition, FocusTaskInput, ReorderTaskInput, Task,
-    TaskField, TaskStatus, UpdateTaskInput, Viewer, use_create_task, use_delete_task,
+    TaskField, TaskStatus, UnfocusTaskInput, UpdateTaskInput, use_create_task, use_delete_task,
     use_focus_task, use_list_all_task_fields_live, use_list_field_definitions_live,
-    use_list_tasks_live, use_reorder_task, use_unfocus_task, use_update_task, use_viewer,
+    use_list_tasks_live, use_reorder_task, use_unfocus_task, use_update_task,
 };
 use crate::time_utils;
 
-const COLUMN_STATUSES: [TaskStatus; 5] = [
+const COLUMN_STATUSES: [TaskStatus; 4] = [
     TaskStatus::Inbox,
     TaskStatus::UpNext,
-    TaskStatus::InProgress,
     TaskStatus::Paused,
     TaskStatus::Done,
 ];
 
 #[component]
 pub fn Dashboard() -> Element {
-    let viewer: Option<Viewer> = use_viewer::<Viewer>();
     let tasks_state = use_list_tasks_live();
 
     let create = use_create_task();
@@ -51,59 +49,34 @@ pub fn Dashboard() -> Element {
 
     let field_defs_state = use_list_field_definitions_live();
     let task_fields_state = use_list_all_task_fields_live();
-    let mut filters = use_signal(ActiveFilters::new);
     let mut show_field_manager = use_signal(|| false);
 
     let field_defs: Vec<FieldDefinition> = field_defs_state.data.clone().unwrap_or_default();
     let all_task_fields: Vec<TaskField> = task_fields_state.data.clone().unwrap_or_default();
 
     let tasks: Vec<Task> = tasks_state.data.clone().unwrap_or_default();
-    let focused_task = tasks
+
+    let mut dock_tasks: Vec<Task> = tasks
         .iter()
-        .find(|t| t.status == TaskStatus::Focused)
-        .cloned();
+        .filter(|t| t.status == TaskStatus::Focused || t.status == TaskStatus::InProgress)
+        .cloned()
+        .collect();
+    dock_tasks.sort_by_key(|t| t.position);
 
     let _tick_val = tick();
-    let focused_elapsed = focused_task
-        .as_ref()
-        .map(|t| time_utils::focused_elapsed(t.time_spent_secs, &t.updated_at));
 
-    let daily_total: i64 = tasks
-        .iter()
-        .map(|t| {
-            if t.status == TaskStatus::Focused {
-                focused_elapsed.unwrap_or(t.time_spent_secs)
-            } else {
-                t.time_spent_secs
-            }
-        })
-        .sum();
-
-    // Filter tasks by active field filters
-    let filtered_tasks: Vec<Task> = {
-        let f = filters.read();
-        if f.is_empty() {
-            tasks.clone()
-        } else {
-            tasks
-                .iter()
-                .filter(|t| f.matches(&t.id, &all_task_fields))
-                .cloned()
-                .collect()
-        }
-    };
-
-    // Store tasks in signal so keyboard handler can access without moving
+    // Store tasks in signal so keyboard handler can access
     let mut tasks_sig = use_signal(Vec::<Task>::new);
-    // Update on each render
     *tasks_sig.write() = tasks.clone();
 
     let on_create = {
         let create = create.clone();
-        move |title: String| {
+        move |(title, status): (String, TaskStatus)| {
             let create = create.clone();
             spawn(async move {
-                let _ = create.call(CreateTaskInput::new(title)).await;
+                let _ = create
+                    .call(CreateTaskInput::new(title).status(status))
+                    .await;
             });
         }
     };
@@ -112,7 +85,6 @@ pub fn Dashboard() -> Element {
         let delete = delete.clone();
         let tasks_for_delete = tasks.clone();
         move |id: String| {
-            // Show undo toast, delay actual delete by 5 seconds
             let task_title = tasks_for_delete
                 .iter()
                 .find(|t| t.id == id)
@@ -126,7 +98,6 @@ pub fn Dashboard() -> Element {
 
             let delete = delete.clone();
             spawn(async move {
-                // Wait 5 seconds, then delete if undo wasn't triggered
                 gloo_timers::future::TimeoutFuture::new(5_000).await;
                 let current = undo_action.read().clone();
                 if current.as_ref().is_some_and(|a| a.task_id == id) {
@@ -149,10 +120,10 @@ pub fn Dashboard() -> Element {
 
     let on_unfocus = {
         let unfocus = unfocus.clone();
-        move |_: ()| {
+        move |id: String| {
             let unfocus = unfocus.clone();
             spawn(async move {
-                let _ = unfocus.call(()).await;
+                let _ = unfocus.call(UnfocusTaskInput::new(id)).await;
             });
         }
     };
@@ -189,12 +160,21 @@ pub fn Dashboard() -> Element {
 
     let on_drop = {
         let reorder = reorder.clone();
+        let unfocus = unfocus.clone();
         move |target: DropTarget| {
             let drag_id = dragging_id.read().clone();
             dragging_id.set(None);
             if let Some(task_id) = drag_id {
                 let reorder = reorder.clone();
+                let unfocus = unfocus.clone();
+                let is_focused = tasks_sig
+                    .read()
+                    .iter()
+                    .any(|t| t.id == task_id && t.status == TaskStatus::Focused);
                 spawn(async move {
+                    if is_focused {
+                        let _ = unfocus.call(UnfocusTaskInput::new(task_id.clone())).await;
+                    }
                     let _ = reorder
                         .call(ReorderTaskInput::new(
                             task_id,
@@ -208,14 +188,55 @@ pub fn Dashboard() -> Element {
     };
 
     let on_drop_focus = {
-        let focus = focus.clone();
+        let reorder = reorder.clone();
         move |_: String| {
             let drag_id = dragging_id.read().clone();
             dragging_id.set(None);
             if let Some(task_id) = drag_id {
-                let focus = focus.clone();
+                let max_pos = tasks_sig
+                    .read()
+                    .iter()
+                    .filter(|t| {
+                        t.status == TaskStatus::Focused || t.status == TaskStatus::InProgress
+                    })
+                    .map(|t| t.position)
+                    .max()
+                    .unwrap_or(0);
+                let reorder = reorder.clone();
                 spawn(async move {
-                    let _ = focus.call(FocusTaskInput::new(task_id)).await;
+                    let _ = reorder
+                        .call(ReorderTaskInput::new(
+                            task_id,
+                            TaskStatus::InProgress,
+                            max_pos + 10_000,
+                        ))
+                        .await;
+                });
+            }
+        }
+    };
+
+    let on_dock_reorder = {
+        let reorder = reorder.clone();
+        move |position: i32| {
+            let drag_id = dragging_id.read().clone();
+            dragging_id.set(None);
+            if let Some(task_id) = drag_id {
+                let reorder = reorder.clone();
+                // Preserve current status for dock cards, otherwise move to InProgress
+                let status = tasks_sig
+                    .read()
+                    .iter()
+                    .find(|t| t.id == task_id)
+                    .map(|t| t.status.clone());
+                let target_status = match status {
+                    Some(TaskStatus::Focused | TaskStatus::InProgress) => status.unwrap(),
+                    _ => TaskStatus::InProgress,
+                };
+                spawn(async move {
+                    let _ = reorder
+                        .call(ReorderTaskInput::new(task_id, target_status, position))
+                        .await;
                 });
             }
         }
@@ -234,12 +255,9 @@ pub fn Dashboard() -> Element {
         id.and_then(|sid| tasks.iter().find(|t| t.id == sid).cloned())
     };
 
-    // Keyboard handler uses cloned mutation handles directly
     let on_keydown = {
         let focus_mut = focus.clone();
-        let unfocus_mut = unfocus.clone();
         move |e: Event<KeyboardData>| {
-            // Skip if an input/textarea is focused (except Escape)
             if let Some(window) = web_sys::window()
                 && let Some(doc) = window.document()
                 && let Some(el) = doc.active_element()
@@ -272,7 +290,11 @@ pub fn Dashboard() -> Element {
                 Key::Character(ref c) if c == "n" => {
                     show_capture.set(true);
                 }
-                Key::Character(ref c) if ("1"..="5").contains(&c.as_str()) => {
+                Key::Character(ref c) if c == "f" => {
+                    let current = *show_field_manager.read();
+                    show_field_manager.set(!current);
+                }
+                Key::Character(ref c) if ("1"..="4").contains(&c.as_str()) => {
                     let col = c.parse::<usize>().unwrap_or(1) - 1;
                     focused_col.set(Some(col));
                     focused_row.set(Some(0));
@@ -313,12 +335,6 @@ pub fn Dashboard() -> Element {
                         }
                     }
                 }
-                Key::Backspace => {
-                    let unfocus_mut = unfocus_mut.clone();
-                    spawn(async move {
-                        let _ = unfocus_mut.call(()).await;
-                    });
-                }
                 _ => {}
             }
         }
@@ -331,8 +347,6 @@ pub fn Dashboard() -> Element {
             onkeydown: on_keydown,
 
             Header {
-                viewer: viewer.clone(),
-                daily_total,
                 on_manage_fields: move |_| show_field_manager.set(true),
             }
 
@@ -341,7 +355,7 @@ pub fn Dashboard() -> Element {
                     on_submit: {
                         let on_create = on_create.clone();
                         move |title: String| {
-                            on_create(title);
+                            on_create((title, TaskStatus::Inbox));
                             show_capture.set(false);
                         }
                     },
@@ -349,28 +363,23 @@ pub fn Dashboard() -> Element {
                 }
             }
 
-            if !field_defs.is_empty() {
-                FieldFilterBar {
-                    fields: field_defs.clone(),
-                    filters: filters.read().clone(),
-                    on_toggle: move |(fid, val): (String, String)| {
-                        filters.write().toggle(&fid, &val);
-                    },
-                }
-            }
-
             div { class: "desktop-layout",
                 FocusDock {
-                    task: focused_task.clone(),
-                    elapsed_secs: focused_elapsed,
+                    tasks: dock_tasks.clone(),
+                    field_defs: field_defs.clone(),
+                    task_fields: all_task_fields.clone(),
                     is_drag_active: dragging_id.read().is_some(),
-                    on_click: on_select,
+                    on_focus: on_focus.clone(),
                     on_unfocus: on_unfocus.clone(),
                     on_drop_focus: on_drop_focus.clone(),
+                    on_reorder: on_dock_reorder.clone(),
+                    on_drag_start,
+                    on_drag_end,
+                    on_select,
                 }
 
                 Board {
-                    tasks: filtered_tasks.clone(),
+                    tasks: tasks.clone(),
                     field_defs: field_defs.clone(),
                     task_fields: all_task_fields.clone(),
                     focused_col: *focused_col.read(),
@@ -378,40 +387,57 @@ pub fn Dashboard() -> Element {
                     dragging_id: dragging_id.read().clone(),
                     on_select,
                     on_delete: on_delete.clone(),
-                    on_focus: on_focus.clone(),
                     on_create: on_create.clone(),
-                    on_status_change: on_status_change.clone(),
                     on_drag_start,
                     on_drag_end,
                     on_drop,
                 }
+
+                div { class: "scroll-indicator", "↓" }
             }
 
             div { class: "mobile-layout",
-                if let Some(ref ft) = focused_task {
-                    div {
-                        class: "focus-bar",
-                        onclick: {
-                            let id = ft.id.clone();
-                            let mut on_select = on_select;
-                            move |_| on_select(id.clone())
-                        },
-                        div { class: "focus-bar-dot" }
-                        span { class: "focus-bar-title", "{ft.title}" }
-                        span { class: "focus-bar-time",
-                            "{time_utils::format_timer(focused_elapsed.unwrap_or(0))}"
+                if !dock_tasks.is_empty() {
+                    div { class: "focus-bar-container",
+                        for ft in &dock_tasks {
+                            {
+                                let is_active = ft.status == TaskStatus::Focused;
+                                let timer = if is_active {
+                                    time_utils::format_timer(
+                                        time_utils::focused_elapsed(ft.time_spent_secs, &ft.updated_at)
+                                    )
+                                } else {
+                                    time_utils::format_duration(ft.time_spent_secs)
+                                };
+                                rsx! {
+                                    div {
+                                        key: "{ft.id}",
+                                        class: if is_active { "focus-bar focus-bar-active" } else { "focus-bar" },
+                                        onclick: {
+                                            let id = ft.id.clone();
+                                            let mut on_select = on_select;
+                                            move |_| on_select(id.clone())
+                                        },
+                                        if is_active {
+                                            div { class: "focus-bar-dot" }
+                                        }
+                                        span { class: "focus-bar-title", "{ft.title}" }
+                                        span { class: "focus-bar-time", "{timer}" }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
 
                 StatusTabs {
-                    tasks: filtered_tasks.clone(),
+                    tasks: tasks.clone(),
                     active: active_tab(),
                     on_change: move |status: TaskStatus| active_tab.set(status),
                 }
 
                 TaskList {
-                    tasks: filtered_tasks.clone(),
+                    tasks: tasks.clone(),
                     active_status: active_tab(),
                     on_select,
                     on_delete: on_delete.clone(),
@@ -432,8 +458,6 @@ pub fn Dashboard() -> Element {
                     field_defs: field_defs.clone(),
                     task_fields: all_task_fields.clone(),
                     on_close: on_close_detail,
-                    on_status_change: on_status_change.clone(),
-                    on_focus: on_focus.clone(),
                     on_update,
                 }
             }

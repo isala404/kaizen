@@ -491,6 +491,17 @@ impl TaskField {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UnfocusTaskInput {
+    pub id: String,
+}
+
+impl UnfocusTaskInput {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self { id: id.into() }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UpdateFieldDefinitionInput {
     pub id: String,
     pub key: Option<String>,
@@ -634,6 +645,8 @@ pub enum FieldValueType {
     Bool,
     Int,
     Decimal,
+    List,
+    Url,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

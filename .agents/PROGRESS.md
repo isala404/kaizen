@@ -6,6 +6,13 @@ Phase 5: Attachments, undo toast, column collapse, done filter
 
 All phases complete. 12 backend tests passing, forge check green.
 
+UI rebuild: horizontal focus dock, simplified board cards, removed DnD/filters/play buttons
+- Removed: drag-and-drop, FieldFilterBar, FieldPills, TimeFilter, play/pause buttons, status section in detail panel
+- Focus dock cards: click to toggle focus, equal width via flex: 1 1 0, live seconds on focused card
+- Board cards: contextual subtitles (Added Xh ago / description / Paused Xh ago), color bar from enum fields
+- Adding tasks: inline "+" in each column creates task with that column's status
+- Dead files left on disk: field_filter_bar.rs, field_pills.rs (unreachable, not compiled)
+
 Key decisions:
 - #[forge::model] strips derives, use plain #[derive(sqlx::FromRow, Serialize, Deserialize)]
 - TestMutationContext can't call handlers, unit tests hit DB directly

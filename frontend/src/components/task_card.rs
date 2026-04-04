@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::components::FieldPills;
+use crate::components::focus_dock::task_field_pills;
 use crate::forge::{FieldDefinition, Task, TaskField, TaskStatus};
 use crate::time_utils;
 
@@ -13,7 +13,6 @@ pub fn TaskCard(
     dragging_id: Option<String>,
     on_select: EventHandler<String>,
     on_delete: EventHandler<String>,
-    on_focus: EventHandler<String>,
     on_drag_start: Option<EventHandler<String>>,
     on_drag_end: Option<EventHandler<()>>,
 ) -> Element {
@@ -33,9 +32,27 @@ pub fn TaskCard(
     }
     let card_class = classes.join(" ");
 
-    let time_str = time_utils::format_duration(task.time_spent_secs);
-    let rel_time = time_utils::relative_time(&task.created_at);
-    let has_fields = field_defs.is_some() && task_fields.is_some();
+    let subtitle = match task.status {
+        TaskStatus::Inbox => {
+            Some(format!("Added {}", time_utils::relative_time(&task.created_at)))
+        }
+        TaskStatus::Paused => {
+            if !task.description.is_empty() {
+                Some(task.description.clone())
+            } else {
+                Some(format!(
+                    "Paused {}",
+                    time_utils::relative_time(&task.updated_at)
+                ))
+            }
+        }
+        _ => None,
+    };
+
+    let pills = match (field_defs.as_ref(), task_fields.as_ref()) {
+        (Some(fds), Some(tfs)) => task_field_pills(&task.id, fds, tfs),
+        _ => Vec::new(),
+    };
 
     rsx! {
         div {
@@ -44,7 +61,10 @@ pub fn TaskCard(
             ondragstart: {
                 let id = task.id.clone();
                 let handler = on_drag_start.clone();
-                move |_| {
+                move |e: Event<DragData>| {
+                    let dt = e.data().data_transfer();
+                    let _ = dt.set_data("text/plain", &id);
+                    dt.set_effect_allowed("move");
                     if let Some(ref h) = handler {
                         h.call(id.clone());
                     }
@@ -58,47 +78,27 @@ pub fn TaskCard(
                     }
                 }
             },
-            div { class: "task-card-content",
-                h4 {
-                    class: "task-card-title",
-                    onclick: {
-                        let id = task.id.clone();
-                        move |e: Event<MouseData>| {
-                            e.stop_propagation();
-                            on_select.call(id.clone());
-                        }
-                    },
-                    "{task.title}"
-                }
-                div { class: "task-card-footer",
-                    span { class: "task-time", "{rel_time}" }
-                    if !time_str.is_empty() {
-                        span { class: "task-total-time", "{time_str}" }
-                    }
-                    if has_fields {
-                        FieldPills {
-                            task_id: task.id.clone(),
-                            fields: field_defs.clone().unwrap_or_default(),
-                            task_fields: task_fields.clone().unwrap_or_default(),
+            onclick: {
+                let id = task.id.clone();
+                move |_| on_select.call(id.clone())
+            },
+            h4 { class: "task-card-title", "{task.title}" }
+            if let Some(ref sub) = subtitle {
+                p { class: "task-card-subtitle", "{sub}" }
+            }
+            if !pills.is_empty() {
+                div { class: "task-card-fields",
+                    for (key, value, color) in &pills {
+                        span {
+                            class: "task-card-pill",
+                            style: "--tag-color: {color}",
+                            title: "{key}",
+                            "{value}"
                         }
                     }
                 }
             }
             div { class: "task-actions",
-                if task.status != TaskStatus::Focused {
-                    button {
-                        class: "task-action-btn",
-                        title: "Focus",
-                        onclick: {
-                            let id = task.id.clone();
-                            move |e: Event<MouseData>| {
-                                e.stop_propagation();
-                                on_focus.call(id.clone());
-                            }
-                        },
-                        "▶"
-                    }
-                }
                 button {
                     class: "task-action-btn task-action-delete",
                     title: "Delete",

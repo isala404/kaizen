@@ -17,7 +17,6 @@ pub fn TaskList(
     let empty_hint = match active_status {
         TaskStatus::Inbox => "Tap + to add a task",
         TaskStatus::UpNext => "Swipe tasks here from Inbox",
-        TaskStatus::InProgress => "Swipe right on a task to start",
         TaskStatus::Paused => "Park tasks you'll come back to",
         TaskStatus::Done => "Swipe right to complete",
         _ => "",
@@ -40,7 +39,6 @@ pub fn TaskList(
                         task: task.clone(),
                         on_select,
                         on_delete,
-                        on_focus,
                     }
                 }
             }

@@ -11,7 +11,6 @@ pub fn StatusTabs(
     let tabs = vec![
         ("Inbox", TaskStatus::Inbox),
         ("Up next", TaskStatus::UpNext),
-        ("In progress", TaskStatus::InProgress),
         ("Paused", TaskStatus::Paused),
         ("Done", TaskStatus::Done),
     ];
