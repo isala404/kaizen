@@ -2,8 +2,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub const TASK_COLUMNS: &str = "id, user_id, title, description, status, time_spent_secs, position, due_at, created_at, updated_at";
-
 #[forge::forge_enum]
 pub enum TaskStatus {
     Inbox,

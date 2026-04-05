@@ -8,11 +8,7 @@ Kaizen organizes work across four board columns — Inbox, Up Next, Paused, and 
 
 The frontend compiles to web, desktop, iOS, and Android from the same codebase, all talking to the same backend with realtime sync.
 
-## Screenshots
-
-<!-- Replace with actual screenshots showing web, desktop, and iOS running simultaneously with realtime sync -->
-
-![Kaizen running on Web, Desktop, and iOS with realtime sync](./docs/screenshots/multi-platform.png)
+![Kaizen running on Web, Desktop, and iOS with realtime sync](assets/kaizen-demo.gif)
 
 ## Architecture
 

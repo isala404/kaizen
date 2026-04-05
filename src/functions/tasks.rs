@@ -4,9 +4,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    schema::{TASK_COLUMNS, Task, TaskStatus},
-    support::{next_position, required_trimmed},
+    schema::{Task, TaskStatus},
+    support::{POSITION_STEP, next_position, required_trimmed},
 };
+
+const TASK_COLS: &str = "id, user_id, title, description, status, time_spent_secs, position, due_at, created_at, updated_at";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateTaskInput {
@@ -54,13 +56,13 @@ async fn find_task_for_user<'a, E>(
 where
     E: sqlx::PgExecutor<'a>,
 {
-    let query = format!("SELECT {TASK_COLUMNS} FROM tasks WHERE id = $1 AND user_id = $2");
-
-    let task = sqlx::query_as::<_, Task>(&query)
-        .bind(task_id)
-        .bind(user_id)
-        .fetch_optional(executor)
-        .await?;
+    let task = sqlx::query_as::<_, Task>(
+        "SELECT id, user_id, title, description, status, time_spent_secs, position, due_at, created_at, updated_at FROM tasks WHERE id = $1 AND user_id = $2",
+    )
+    .bind(task_id)
+    .bind(user_id)
+    .fetch_optional(executor)
+    .await?;
 
     Ok(task)
 }
@@ -68,14 +70,13 @@ where
 #[forge::query]
 pub async fn list_tasks(ctx: &QueryContext) -> Result<Vec<Task>> {
     let user_id = ctx.user_id()?;
-    let query = format!(
-        "SELECT {TASK_COLUMNS} FROM tasks WHERE user_id = $1 ORDER BY position ASC, created_at ASC"
-    );
 
-    let tasks = sqlx::query_as::<_, Task>(&query)
-        .bind(user_id)
-        .fetch_all(ctx.db())
-        .await?;
+    let tasks = sqlx::query_as::<_, Task>(
+        "SELECT id, user_id, title, description, status, time_spent_secs, position, due_at, created_at, updated_at FROM tasks WHERE user_id = $1 ORDER BY position ASC, created_at ASC",
+    )
+    .bind(user_id)
+    .fetch_all(ctx.db())
+    .await?;
 
     Ok(tasks)
 }
@@ -107,7 +108,7 @@ pub async fn create_task(ctx: &MutationContext, input: CreateTaskInput) -> Resul
 
     let position = next_position(max_pos);
     let insert_task_query = format!(
-        "INSERT INTO tasks (user_id, title, description, status, position) VALUES ($1, $2, $3, $4, $5) RETURNING {TASK_COLUMNS}"
+        "INSERT INTO tasks (user_id, title, description, status, position) VALUES ($1, $2, $3, $4, $5) RETURNING {TASK_COLS}"
     );
 
     let task = sqlx::query_as::<_, Task>(&insert_task_query)
@@ -139,7 +140,7 @@ pub async fn update_task(ctx: &MutationContext, input: UpdateTaskInput) -> Resul
     let status = input.status.unwrap_or(existing.status);
     let due_at = input.due_at.unwrap_or(existing.due_at);
     let update_task_query = format!(
-        "UPDATE tasks SET title = $1, description = $2, status = $3, due_at = $4, updated_at = NOW() WHERE id = $5 AND user_id = $6 RETURNING {TASK_COLUMNS}"
+        "UPDATE tasks SET title = $1, description = $2, status = $3, due_at = $4, updated_at = NOW() WHERE id = $5 AND user_id = $6 RETURNING {TASK_COLS}"
     );
 
     let task = sqlx::query_as::<_, Task>(&update_task_query)
@@ -182,7 +183,7 @@ pub async fn focus_task(ctx: &MutationContext, input: FocusTaskInput) -> Result<
 
     // Defocus the currently focused task (stays in focus area as in_progress)
     let focused_query =
-        format!("SELECT {TASK_COLUMNS} FROM tasks WHERE user_id = $1 AND status = 'focused'");
+        format!("SELECT {TASK_COLS} FROM tasks WHERE user_id = $1 AND status = 'focused'");
 
     let focused = sqlx::query_as::<_, Task>(&focused_query)
         .bind(user_id)
@@ -207,12 +208,22 @@ pub async fn focus_task(ctx: &MutationContext, input: FocusTaskInput) -> Result<
         .await?;
     }
 
-    // Focus the new task
+    // Place the newly focused task at the front of the dock
+    let min_dock_pos: Option<i32> = sqlx::query_scalar(
+        "SELECT MIN(position) FROM tasks WHERE user_id = $1 AND status IN ('focused', 'in_progress')",
+    )
+    .bind(user_id)
+    .fetch_one(&mut conn)
+    .await?;
+
+    let front_pos = min_dock_pos.unwrap_or(POSITION_STEP) - POSITION_STEP;
+
     let focus_task_query = format!(
-        "UPDATE tasks SET status = 'focused', updated_at = $1 WHERE id = $2 AND user_id = $3 RETURNING {TASK_COLUMNS}"
+        "UPDATE tasks SET status = 'focused', position = $1, updated_at = $2 WHERE id = $3 AND user_id = $4 RETURNING {TASK_COLS}"
     );
 
     let task = sqlx::query_as::<_, Task>(&focus_task_query)
+        .bind(front_pos)
         .bind(now)
         .bind(input.id)
         .bind(user_id)
@@ -247,7 +258,7 @@ pub async fn unfocus_task(ctx: &MutationContext, input: UnfocusTaskInput) -> Res
     };
 
     let unfocus_task_query = format!(
-        "UPDATE tasks SET status = 'in_progress', time_spent_secs = $1, updated_at = $2 WHERE id = $3 RETURNING {TASK_COLUMNS}"
+        "UPDATE tasks SET status = 'in_progress', time_spent_secs = $1, updated_at = $2 WHERE id = $3 RETURNING {TASK_COLS}"
     );
 
     let result = sqlx::query_as::<_, Task>(&unfocus_task_query)
@@ -266,7 +277,7 @@ pub async fn reorder_task(ctx: &MutationContext, input: ReorderTaskInput) -> Res
     let mut conn = ctx.conn().await?;
 
     let reorder_task_query = format!(
-        "UPDATE tasks SET status = $1, position = $2, updated_at = NOW() WHERE id = $3 AND user_id = $4 RETURNING {TASK_COLUMNS}"
+        "UPDATE tasks SET status = $1, position = $2, updated_at = NOW() WHERE id = $3 AND user_id = $4 RETURNING {TASK_COLS}"
     );
 
     let task = sqlx::query_as::<_, Task>(&reorder_task_query)

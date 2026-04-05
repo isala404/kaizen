@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 
-use crate::forge::{Task, TaskStatus};
+use crate::components::FieldPills;
+use crate::forge::{FieldDefinition, Task, TaskField, TaskStatus};
 use crate::time_utils;
 use crate::touch_drag::use_touch_drag;
 
@@ -9,6 +10,8 @@ pub fn TaskCard(
     task: Task,
     selected: Option<bool>,
     dragging_id: Option<String>,
+    field_defs: Vec<FieldDefinition>,
+    task_fields: Vec<TaskField>,
     on_select: EventHandler<String>,
     on_delete: EventHandler<String>,
     on_drag_start: Option<EventHandler<String>>,
@@ -103,6 +106,12 @@ pub fn TaskCard(
             },
             h4 { class: "task-card-title", "{task.title}" }
             p { class: "task-card-subtitle", "{subtitle}" }
+
+            FieldPills {
+                task_id: task.id.clone(),
+                field_defs: field_defs.clone(),
+                task_fields: task_fields.clone(),
+            }
             div { class: "task-actions",
                 button {
                     class: "task-action-btn task-action-delete",

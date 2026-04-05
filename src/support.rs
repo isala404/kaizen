@@ -1,18 +1,10 @@
 use forge::prelude::*;
 use uuid::Uuid;
 
-const POSITION_STEP: i32 = 10_000;
+pub const POSITION_STEP: i32 = 10_000;
 
 pub fn next_position(max_position: Option<i32>) -> i32 {
     max_position.unwrap_or_default() + POSITION_STEP
-}
-
-pub fn qualify_columns(alias: &str, columns: &str) -> String {
-    columns
-        .split(", ")
-        .map(|column| format!("{alias}.{column}"))
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 
 pub fn required_trimmed(value: &str, message: &'static str) -> Result<String> {

@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use dioxus_sdk::storage::use_persistent;
 
 use crate::components::{DropTarget, TaskCard, TouchHoverZone};
-use crate::forge::{Task, TaskStatus};
+use crate::forge::{FieldDefinition, Task, TaskField, TaskStatus};
 use crate::task_positions::{drop_status, insertion_position, trailing_position};
 use crate::time_utils;
 
@@ -14,6 +14,8 @@ pub fn BoardColumn(
     focused_row: Option<usize>,
     tasks: Vec<Task>,
     dragging_id: Option<String>,
+    field_defs: Vec<FieldDefinition>,
+    task_fields: Vec<TaskField>,
     on_select: EventHandler<String>,
     on_delete: EventHandler<String>,
     on_create: EventHandler<(String, TaskStatus)>,
@@ -127,6 +129,8 @@ pub fn BoardColumn(
                                         task: (*task).clone(),
                                         selected: focused_row == Some(i),
                                         dragging_id: dragging_id.clone(),
+                                        field_defs: field_defs.clone(),
+                                        task_fields: task_fields.clone(),
                                         on_select,
                                         on_delete,
                                         on_drag_start: on_drag_start,

@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
-use crate::components::TouchHoverZone;
-use crate::forge::{Task, TaskStatus};
+use crate::components::{FieldPills, TouchHoverZone};
+use crate::forge::{FieldDefinition, Task, TaskField, TaskStatus};
 use crate::task_positions::{insertion_position, trailing_position};
 use crate::time_utils;
 use crate::touch_drag::use_touch_drag;
@@ -9,6 +9,8 @@ use crate::touch_drag::use_touch_drag;
 #[component]
 pub fn FocusDock(
     tasks: Vec<Task>,
+    field_defs: Vec<FieldDefinition>,
+    task_fields: Vec<TaskField>,
     is_drag_active: Option<bool>,
     on_focus: EventHandler<String>,
     on_unfocus: EventHandler<String>,
@@ -171,6 +173,11 @@ pub fn FocusDock(
                                         "Worked {time_str}"
                                     }
                                 }
+                            }
+                            FieldPills {
+                                task_id: task.id.clone(),
+                                field_defs: field_defs.clone(),
+                                task_fields: task_fields.clone(),
                             }
                         }
                     }

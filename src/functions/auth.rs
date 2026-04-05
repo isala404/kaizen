@@ -2,9 +2,11 @@ use forge::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    schema::{USER_COLUMNS, User, Viewer},
+    schema::{User, Viewer},
     support::required_trimmed,
 };
+
+const USER_COLS: &str = "id, email, name, password_hash, created_at, updated_at";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterInput {
@@ -60,12 +62,12 @@ async fn find_user_by_email<'a, E>(executor: E, email: &str) -> Result<Option<Us
 where
     E: sqlx::PgExecutor<'a>,
 {
-    let query = format!("SELECT {USER_COLUMNS} FROM users WHERE email = $1");
-
-    let user = sqlx::query_as::<_, User>(&query)
-        .bind(email)
-        .fetch_optional(executor)
-        .await?;
+    let user = sqlx::query_as::<_, User>(
+        "SELECT id, email, name, password_hash, created_at, updated_at FROM users WHERE email = $1",
+    )
+    .bind(email)
+    .fetch_optional(executor)
+    .await?;
 
     Ok(user)
 }
@@ -74,12 +76,12 @@ async fn find_user_by_id<'a, E>(executor: E, user_id: uuid::Uuid) -> Result<Opti
 where
     E: sqlx::PgExecutor<'a>,
 {
-    let query = format!("SELECT {USER_COLUMNS} FROM users WHERE id = $1");
-
-    let user = sqlx::query_as::<_, User>(&query)
-        .bind(user_id)
-        .fetch_optional(executor)
-        .await?;
+    let user = sqlx::query_as::<_, User>(
+        "SELECT id, email, name, password_hash, created_at, updated_at FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(executor)
+    .await?;
 
     Ok(user)
 }
@@ -95,7 +97,7 @@ pub async fn register(ctx: &MutationContext, input: RegisterInput) -> Result<Aut
 
     let mut conn = ctx.conn().await?;
     let insert_user_query = format!(
-        "INSERT INTO users (email, name, password_hash) VALUES ($1, $2, $3) RETURNING {USER_COLUMNS}"
+        "INSERT INTO users (email, name, password_hash) VALUES ($1, $2, $3) RETURNING {USER_COLS}"
     );
 
     let user = sqlx::query_as::<_, User>(&insert_user_query)

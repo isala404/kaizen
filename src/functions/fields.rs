@@ -3,9 +3,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    schema::{FIELD_DEFINITION_COLUMNS, FieldDefinition, FieldValueType},
+    schema::{FieldDefinition, FieldValueType},
     support::{next_position, required_trimmed},
 };
+
+const FD_COLS: &str = "id, user_id, key, value_type, color, options, position, created_at";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateFieldDefinitionInput {
@@ -36,14 +38,13 @@ fn normalize_field_key(key: &str) -> Result<String> {
 #[forge::query]
 pub async fn list_field_definitions(ctx: &QueryContext) -> Result<Vec<FieldDefinition>> {
     let user_id = ctx.user_id()?;
-    let query = format!(
-        "SELECT {FIELD_DEFINITION_COLUMNS} FROM field_definitions WHERE user_id = $1 ORDER BY position ASC, created_at ASC"
-    );
 
-    let fields = sqlx::query_as::<_, FieldDefinition>(&query)
-        .bind(user_id)
-        .fetch_all(ctx.db())
-        .await?;
+    let fields = sqlx::query_as::<_, FieldDefinition>(
+        "SELECT id, user_id, key, value_type, color, options, position, created_at FROM field_definitions WHERE user_id = $1 ORDER BY position ASC, created_at ASC",
+    )
+    .bind(user_id)
+    .fetch_all(ctx.db())
+    .await?;
     Ok(fields)
 }
 
@@ -64,7 +65,7 @@ pub async fn create_field_definition(
 
     let position = next_position(max_pos);
     let insert_field_query = format!(
-        "INSERT INTO field_definitions (user_id, key, value_type, color, options, position) VALUES ($1, $2, $3, $4, $5, $6) RETURNING {FIELD_DEFINITION_COLUMNS}"
+        "INSERT INTO field_definitions (user_id, key, value_type, color, options, position) VALUES ($1, $2, $3, $4, $5, $6) RETURNING {FD_COLS}"
     );
 
     let field = sqlx::query_as::<_, FieldDefinition>(&insert_field_query)
@@ -95,7 +96,7 @@ pub async fn update_field_definition(
     let mut conn = ctx.conn().await?;
 
     let select_field_query = format!(
-        "SELECT {FIELD_DEFINITION_COLUMNS} FROM field_definitions WHERE id = $1 AND user_id = $2"
+        "SELECT {FD_COLS} FROM field_definitions WHERE id = $1 AND user_id = $2"
     );
 
     let existing = sqlx::query_as::<_, FieldDefinition>(&select_field_query)
@@ -114,7 +115,7 @@ pub async fn update_field_definition(
     let position = input.position.unwrap_or(existing.position);
 
     let update_field_query = format!(
-        "UPDATE field_definitions SET key = $1, color = $2, options = $3, position = $4 WHERE id = $5 AND user_id = $6 RETURNING {FIELD_DEFINITION_COLUMNS}"
+        "UPDATE field_definitions SET key = $1, color = $2, options = $3, position = $4 WHERE id = $5 AND user_id = $6 RETURNING {FD_COLS}"
     );
 
     let field = sqlx::query_as::<_, FieldDefinition>(&update_field_query)

@@ -14,7 +14,7 @@ use crate::forge::{
 };
 use crate::task_positions::{
     appended_position, apply_pending_moves, dock_target_status, dock_tasks as collect_dock_tasks,
-    parse_drop_status,
+    parse_drop_status, prepended_position,
 };
 
 fn hit_test_drop_zone_js(x: f64, y: f64) -> String {
@@ -37,7 +37,7 @@ const COLUMN_STATUSES: [TaskStatus; 4] = [
 ];
 const DOCK_STATUSES: [TaskStatus; 2] = [TaskStatus::Focused, TaskStatus::InProgress];
 
-type PendingMoves = HashMap<String, (TaskStatus, i32)>;
+type PendingMoves = HashMap<String, (TaskStatus, i32, f64)>;
 
 fn find_task_title(tasks: &[Task], task_id: &str) -> String {
     tasks
@@ -71,9 +71,24 @@ fn store_pending_move(
     status: TaskStatus,
     position: i32,
 ) {
+    let now = now_secs();
     let mut next_moves = pending_moves.read().clone();
-    next_moves.insert(task_id, (status, position));
+    next_moves.insert(task_id, (status, position, now));
     pending_moves.set(next_moves);
+}
+
+fn now_secs() -> f64 {
+    #[cfg(target_arch = "wasm32")]
+    {
+        js_sys::Date::now() / 1000.0
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs_f64())
+            .unwrap_or(0.0)
+    }
 }
 
 #[component]
@@ -166,6 +181,9 @@ pub fn Dashboard() -> Element {
     let on_focus = {
         let focus = focus.clone();
         move |id: String| {
+            let front_pos = prepended_position(&tasks_sig.read(), &DOCK_STATUSES);
+            store_pending_move(pending_moves, id.clone(), TaskStatus::Focused, front_pos);
+
             let focus = focus.clone();
             spawn(async move {
                 let _ = focus.call(FocusTaskInput::new(id)).await;
@@ -176,6 +194,11 @@ pub fn Dashboard() -> Element {
     let on_unfocus = {
         let unfocus = unfocus.clone();
         move |id: String| {
+            let task = tasks_sig.read().iter().find(|t| t.id == id).cloned();
+            if let Some(task) = task {
+                store_pending_move(pending_moves, id.clone(), TaskStatus::InProgress, task.position);
+            }
+
             let unfocus = unfocus.clone();
             spawn(async move {
                 let _ = unfocus.call(UnfocusTaskInput::new(id)).await;
@@ -557,8 +580,15 @@ pub fn Dashboard() -> Element {
                     if let (Some(col), Some(row)) = (*focused_col.read(), *focused_row.read()) {
                         let col_tasks = tasks_for_column(&tasks_sig.read(), col);
                         if let Some(task) = col_tasks.get(row) {
-                            let focus_mut = focus_mut.clone();
                             let id = task.id.clone();
+                            let front_pos = prepended_position(&tasks_sig.read(), &DOCK_STATUSES);
+                            store_pending_move(
+                                pending_moves,
+                                id.clone(),
+                                TaskStatus::Focused,
+                                front_pos,
+                            );
+                            let focus_mut = focus_mut.clone();
                             spawn(async move {
                                 let _ = focus_mut.call(FocusTaskInput::new(id)).await;
                             });
@@ -595,6 +625,8 @@ pub fn Dashboard() -> Element {
 
             FocusDock {
                 tasks: dock_tasks.clone(),
+                field_defs: field_defs.clone(),
+                task_fields: all_task_fields.clone(),
                 is_drag_active: dragging_id.read().is_some(),
                 on_focus: on_focus.clone(),
                 on_unfocus: on_unfocus.clone(),
@@ -613,6 +645,8 @@ pub fn Dashboard() -> Element {
                 focused_col: *focused_col.read(),
                 focused_row: *focused_row.read(),
                 dragging_id: dragging_id.read().clone(),
+                field_defs: field_defs.clone(),
+                task_fields: all_task_fields.clone(),
                 on_select,
                 on_delete: on_delete.clone(),
                 on_create: on_create.clone(),

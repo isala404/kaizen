@@ -3,9 +3,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    schema::{ATTACHMENT_COLUMNS, Attachment},
-    support::{qualify_columns, require_task_for_user},
+    schema::Attachment,
+    support::require_task_for_user,
 };
+
+const ATT_COLS: &str = "id, task_id, user_id, filename, content_type, size_bytes, storage_key, display, created_at";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListAttachmentsInput {
@@ -31,16 +33,14 @@ pub async fn list_attachments(
     input: ListAttachmentsInput,
 ) -> Result<Vec<Attachment>> {
     let user_id = ctx.user_id()?;
-    let attachment_columns = qualify_columns("a", ATTACHMENT_COLUMNS);
-    let query = format!(
-        "SELECT {attachment_columns} FROM attachments a JOIN tasks t ON t.id = a.task_id WHERE a.task_id = $1 AND t.user_id = $2 ORDER BY a.created_at ASC"
-    );
 
-    let attachments = sqlx::query_as::<_, Attachment>(&query)
-        .bind(input.task_id)
-        .bind(user_id)
-        .fetch_all(ctx.db())
-        .await?;
+    let attachments = sqlx::query_as::<_, Attachment>(
+        "SELECT a.id, a.task_id, a.user_id, a.filename, a.content_type, a.size_bytes, a.storage_key, a.display, a.created_at FROM attachments a JOIN tasks t ON t.id = a.task_id WHERE a.task_id = $1 AND t.user_id = $2 ORDER BY a.created_at ASC",
+    )
+    .bind(input.task_id)
+    .bind(user_id)
+    .fetch_all(ctx.db())
+    .await?;
     Ok(attachments)
 }
 
@@ -57,7 +57,7 @@ pub async fn create_attachment(
     let storage_key = format!("attachments/{}/{}", input.task_id, Uuid::new_v4());
 
     let insert_attachment_query = format!(
-        "INSERT INTO attachments (task_id, user_id, filename, content_type, size_bytes, storage_key) VALUES ($1, $2, $3, $4, $5, $6) RETURNING {ATTACHMENT_COLUMNS}"
+        "INSERT INTO attachments (task_id, user_id, filename, content_type, size_bytes, storage_key) VALUES ($1, $2, $3, $4, $5, $6) RETURNING {ATT_COLS}"
     );
 
     let attachment = sqlx::query_as::<_, Attachment>(&insert_attachment_query)

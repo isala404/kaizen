@@ -5,42 +5,78 @@ use crate::forge::{FieldDefinition, FieldValueType, TaskField};
 #[component]
 pub fn FieldPills(
     task_id: String,
-    fields: Vec<FieldDefinition>,
+    field_defs: Vec<FieldDefinition>,
     task_fields: Vec<TaskField>,
 ) -> Element {
-    let pills: Vec<Element> = fields
+    let pills: Vec<_> = field_defs
         .iter()
-        .filter_map(|fd| {
-            let tf = task_fields
+        .flat_map(|def| {
+            let tf = match task_fields
                 .iter()
-                .find(|tf| tf.task_id == task_id && tf.field_id == fd.id)?;
+                .find(|tf| tf.task_id == task_id && tf.field_id == def.id)
+            {
+                Some(tf) if !tf.value.is_empty() => tf,
+                _ => return vec![],
+            };
 
-            let val = tf.value.as_str();
-            if val.is_empty() {
-                return None;
-            }
+            let color = def.color.as_deref().unwrap_or("#6366f1");
 
-            let color = fd.color.as_deref().unwrap_or("#6366f1");
-
-            Some(match fd.value_type {
-                FieldValueType::Enum => rsx! {
-                    span {
-                        class: "field-pill-enum",
-                        style: "--pill-color: {color}",
-                        "{val}"
+            match def.value_type {
+                FieldValueType::Bool => {
+                    if tf.value != "true" {
+                        return vec![];
                     }
-                },
-                FieldValueType::Bool if val == "true" => rsx! {
-                    span { class: "field-pill-bool" }
-                },
-                FieldValueType::Int | FieldValueType::Decimal => rsx! {
-                    span { class: "field-pill-number", "{val}" }
-                },
-                FieldValueType::Text => rsx! {
-                    span { class: "field-pill-text", "{val}" }
-                },
-                _ => rsx! {},
-            })
+                    vec![rsx! {
+                        span {
+                            key: "{def.id}",
+                            class: "task-card-pill",
+                            style: "--pill-color: {color};",
+                            "{def.key}"
+                        }
+                    }]
+                }
+                FieldValueType::Url => vec![rsx! {
+                    span {
+                        key: "{def.id}",
+                        class: "task-card-pill",
+                        style: "--pill-color: {color};",
+                        "{def.key} \u{2197}"
+                    }
+                }],
+                FieldValueType::List => {
+                    let joined = if tf.value.starts_with('[') {
+                        serde_json::from_str::<Vec<String>>(&tf.value)
+                            .unwrap_or_default()
+                            .join(" | ")
+                    } else {
+                        tf.value
+                            .split(',')
+                            .map(|item| item.trim())
+                            .filter(|item| !item.is_empty())
+                            .collect::<Vec<_>>()
+                            .join(" | ")
+                    };
+                    if joined.is_empty() {
+                        return vec![];
+                    }
+                    vec![rsx! {
+                        span {
+                            key: "{def.id}",
+                            class: "task-card-pill",
+                            style: "--pill-color: {color};",
+                            "{joined}"
+                        }
+                    }]
+                }
+                _ => vec![rsx! {
+                    span {
+                        key: "{def.id}",
+                        class: "task-card-pill",
+                        style: "--pill-color: {color};",
+                        "{tf.value}"
+                    }
+                }],
+            }
         })
         .collect();
 
@@ -49,8 +85,8 @@ pub fn FieldPills(
     }
 
     rsx! {
-        for pill in pills {
-            {pill}
+        div { class: "task-card-pills",
+            {pills.into_iter()}
         }
     }
 }
