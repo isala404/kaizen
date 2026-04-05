@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use dioxus::prelude::*;
 
 use crate::components::{
@@ -54,7 +56,25 @@ pub fn Dashboard() -> Element {
     let field_defs: Vec<FieldDefinition> = field_defs_state.data.clone().unwrap_or_default();
     let all_task_fields: Vec<TaskField> = task_fields_state.data.clone().unwrap_or_default();
 
-    let tasks: Vec<Task> = tasks_state.data.clone().unwrap_or_default();
+    // Pending moves: task_id → (new_status, new_position).
+    // Applied on top of server data so optimistic updates survive
+    // even when the server response hasn't arrived yet.
+    let mut pending_moves = use_signal(HashMap::<String, (TaskStatus, i32)>::new);
+
+    let tasks: Vec<Task> = {
+        let mut base = tasks_state.data.clone().unwrap_or_default();
+        let moves = pending_moves.read();
+        for t in &mut base {
+            if let Some((status, position)) = moves.get(&t.id) {
+                t.status = status.clone();
+                t.position = *position;
+            }
+        }
+        base
+    };
+
+    let mut tasks_sig = use_signal(Vec::<Task>::new);
+    *tasks_sig.write() = tasks.clone();
 
     let mut dock_tasks: Vec<Task> = tasks
         .iter()
@@ -64,10 +84,6 @@ pub fn Dashboard() -> Element {
     dock_tasks.sort_by_key(|t| t.position);
 
     let _tick_val = tick();
-
-    // Store tasks in signal so keyboard handler can access
-    let mut tasks_sig = use_signal(Vec::<Task>::new);
-    *tasks_sig.write() = tasks.clone();
 
     let on_create = {
         let create = create.clone();
@@ -165,23 +181,31 @@ pub fn Dashboard() -> Element {
             let drag_id = dragging_id.read().clone();
             dragging_id.set(None);
             if let Some(task_id) = drag_id {
-                let reorder = reorder.clone();
-                let unfocus = unfocus.clone();
                 let is_focused = tasks_sig
                     .read()
                     .iter()
                     .any(|t| t.id == task_id && t.status == TaskStatus::Focused);
+
+                {
+                    let mut map = pending_moves.read().clone();
+                    map.insert(task_id.clone(), (target.status.clone(), target.position));
+                    pending_moves.set(map);
+                }
+
+                let reorder = reorder.clone();
+                let unfocus = unfocus.clone();
                 spawn(async move {
                     if is_focused {
                         let _ = unfocus.call(UnfocusTaskInput::new(task_id.clone())).await;
                     }
                     let _ = reorder
                         .call(ReorderTaskInput::new(
-                            task_id,
+                            task_id.clone(),
                             target.status,
                             target.position,
                         ))
                         .await;
+                    // Pending move is cleaned up during render when server data confirms it
                 });
             }
         }
@@ -202,15 +226,24 @@ pub fn Dashboard() -> Element {
                     .map(|t| t.position)
                     .max()
                     .unwrap_or(0);
+                let new_pos = max_pos + 10_000;
+
+                {
+                    let mut map = pending_moves.read().clone();
+                    map.insert(task_id.clone(), (TaskStatus::InProgress, new_pos));
+                    pending_moves.set(map);
+                }
+
                 let reorder = reorder.clone();
                 spawn(async move {
                     let _ = reorder
                         .call(ReorderTaskInput::new(
-                            task_id,
+                            task_id.clone(),
                             TaskStatus::InProgress,
-                            max_pos + 10_000,
+                            new_pos,
                         ))
                         .await;
+                    // Pending move is cleaned up during render when server data confirms it
                 });
             }
         }
@@ -223,7 +256,6 @@ pub fn Dashboard() -> Element {
             dragging_id.set(None);
             if let Some(task_id) = drag_id {
                 let reorder = reorder.clone();
-                // Preserve current status for dock cards, otherwise move to InProgress
                 let status = tasks_sig
                     .read()
                     .iter()
@@ -233,10 +265,18 @@ pub fn Dashboard() -> Element {
                     Some(TaskStatus::Focused | TaskStatus::InProgress) => status.unwrap(),
                     _ => TaskStatus::InProgress,
                 };
+
+                {
+                    let mut map = pending_moves.read().clone();
+                    map.insert(task_id.clone(), (target_status.clone(), position));
+                    pending_moves.set(map);
+                }
+
                 spawn(async move {
                     let _ = reorder
-                        .call(ReorderTaskInput::new(task_id, target_status, position))
+                        .call(ReorderTaskInput::new(task_id.clone(), target_status, position))
                         .await;
+                    // Pending move is cleaned up during render when server data confirms it
                 });
             }
         }

@@ -9,7 +9,7 @@ default = ["embedded-frontend"]
 embedded-frontend = ["dep:rust-embed", "forge/embedded-frontend"]
 
 [dependencies]
-forge = { version = "0.8.1", package = "forgex" }
+forge = { git = "https://github.com/isala404/forge", rev = "07e1a972d1cbfafc0bedb89764ee59c0b8ca8c5a", package = "forgex" }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

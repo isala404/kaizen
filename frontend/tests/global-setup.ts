@@ -35,7 +35,7 @@ async function warmupWasm(maxRetries = 120, delayMs = 2000): Promise<void> {
         // dx serve returns the shell page with the wasm loader on first compile,
         // and the compiled app on subsequent loads. Either way, a 200 means
         // the dev server processed the build.
-        if (html.includes("wasm") || html.includes("dioxus")) {
+        if (html.includes("wasm") || html.includes("dioxus") || html.includes("kaizen-frontend")) {
           console.log("WASM build complete, frontend is ready");
           return;
         }

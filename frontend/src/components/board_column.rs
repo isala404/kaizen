@@ -121,13 +121,12 @@ pub fn BoardColumn(
                                 (visible_tasks[i - 1].position + task.position) / 2
                             };
                             rsx! {
-                                if is_dragging {
-                                    CardDropZone {
-                                        key: "dz-{i}",
-                                        status: status.clone(),
-                                        position: insert_pos,
-                                        on_drop,
-                                    }
+                                CardDropZone {
+                                    key: "dz-{i}",
+                                    status: status.clone(),
+                                    position: insert_pos,
+                                    visible: is_dragging,
+                                    on_drop,
                                 }
                                 TaskCard {
                                     key: "{task.id}",
@@ -143,6 +142,15 @@ pub fn BoardColumn(
                                 }
                             }
                         }
+                    }
+
+                    // Trailing drop zone after the last card
+                    CardDropZone {
+                        key: "dz-end",
+                        status: status.clone(),
+                        position: end_position,
+                        visible: is_dragging,
+                        on_drop,
                     }
 
                     if is_done && hidden_count > 0 {
@@ -209,25 +217,38 @@ pub fn BoardColumn(
 fn CardDropZone(
     status: TaskStatus,
     position: i32,
+    visible: bool,
     on_drop: EventHandler<DropTarget>,
 ) -> Element {
     let mut active = use_signal(|| false);
 
+    let class = if !visible {
+        "drop-zone drop-zone-hidden"
+    } else if *active.read() {
+        "drop-zone drop-zone-active"
+    } else {
+        "drop-zone"
+    };
+
     rsx! {
         div {
-            class: if *active.read() { "drop-zone drop-zone-active" } else { "drop-zone" },
+            class,
             ondragover: move |e| {
-                e.prevent_default();
-                active.set(true);
+                if visible {
+                    e.prevent_default();
+                    active.set(true);
+                }
             },
             ondragleave: move |_| active.set(false),
             ondrop: {
                 let status = status.clone();
                 move |e: Event<DragData>| {
-                    e.prevent_default();
-                    e.stop_propagation();
-                    active.set(false);
-                    on_drop.call(DropTarget { status: status.clone(), position });
+                    if visible {
+                        e.prevent_default();
+                        e.stop_propagation();
+                        active.set(false);
+                        on_drop.call(DropTarget { status: status.clone(), position });
+                    }
                 }
             },
         }

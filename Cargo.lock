@@ -846,8 +846,7 @@ checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 [[package]]
 name = "forge-codegen"
 version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15ac832e4c12129f601bae974819030b72cdf8e657c7234944f974fbe68067f7"
+source = "git+https://github.com/isala404/forge?rev=07e1a972d1cbfafc0bedb89764ee59c0b8ca8c5a#07e1a972d1cbfafc0bedb89764ee59c0b8ca8c5a"
 dependencies = [
  "forge-core",
  "quote",
@@ -861,8 +860,7 @@ dependencies = [
 [[package]]
 name = "forge-core"
 version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b3c380d46fdf18ebd88e5e0e8d9be3b96810460d721f9e59dff283967eb0da9"
+source = "git+https://github.com/isala404/forge?rev=07e1a972d1cbfafc0bedb89764ee59c0b8ca8c5a#07e1a972d1cbfafc0bedb89764ee59c0b8ca8c5a"
 dependencies = [
  "base64",
  "bytes",
@@ -888,8 +886,7 @@ dependencies = [
 [[package]]
 name = "forge-macros"
 version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc9f8e6a07ec24c7ec63d132cd676909e7693c6bebd551bd5fc20d3c99024b31"
+source = "git+https://github.com/isala404/forge?rev=07e1a972d1cbfafc0bedb89764ee59c0b8ca8c5a#07e1a972d1cbfafc0bedb89764ee59c0b8ca8c5a"
 dependencies = [
  "cron",
  "proc-macro2",
@@ -901,8 +898,7 @@ dependencies = [
 [[package]]
 name = "forge-runtime"
 version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa92b4096d339d71577e7247a5b69824c24caf50829f779c32b4249fb763cf00"
+source = "git+https://github.com/isala404/forge?rev=07e1a972d1cbfafc0bedb89764ee59c0b8ca8c5a#07e1a972d1cbfafc0bedb89764ee59c0b8ca8c5a"
 dependencies = [
  "anyhow",
  "axum",
@@ -942,8 +938,7 @@ dependencies = [
 [[package]]
 name = "forgex"
 version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d546d938f6e5bebaf3d0c2979e2c2deac60035d53ba9d8e7984128860b4979bb"
+source = "git+https://github.com/isala404/forge?rev=07e1a972d1cbfafc0bedb89764ee59c0b8ca8c5a#07e1a972d1cbfafc0bedb89764ee59c0b8ca8c5a"
 dependencies = [
  "anyhow",
  "axum",

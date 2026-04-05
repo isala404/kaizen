@@ -85,12 +85,11 @@ pub fn FocusDock(
                     };
 
                     rsx! {
-                        if dragging {
-                            if let Some(ref reorder_handler) = on_reorder {
-                                DockDropZone {
-                                    position: insert_pos,
-                                    on_drop: reorder_handler.clone(),
-                                }
+                        if let Some(ref reorder_handler) = on_reorder {
+                            DockDropZone {
+                                position: insert_pos,
+                                visible: dragging,
+                                on_drop: reorder_handler.clone(),
                             }
                         }
                         div {
@@ -167,12 +166,11 @@ pub fn FocusDock(
                     }
                 }
             }
-            if dragging {
-                if let Some(ref reorder_handler) = on_reorder {
-                    DockDropZone {
-                        position: tasks.last().map(|t| t.position + 10_000).unwrap_or(10_000),
-                        on_drop: reorder_handler.clone(),
-                    }
+            if let Some(ref reorder_handler) = on_reorder {
+                DockDropZone {
+                    position: tasks.last().map(|t| t.position + 10_000).unwrap_or(10_000),
+                    visible: dragging,
+                    on_drop: reorder_handler.clone(),
                 }
             }
         }
@@ -180,22 +178,34 @@ pub fn FocusDock(
 }
 
 #[component]
-fn DockDropZone(position: i32, on_drop: EventHandler<i32>) -> Element {
+fn DockDropZone(position: i32, visible: bool, on_drop: EventHandler<i32>) -> Element {
     let mut active = use_signal(|| false);
+
+    let class = if !visible {
+        "drop-zone-h drop-zone-h-hidden"
+    } else if *active.read() {
+        "drop-zone-h drop-zone-h-active"
+    } else {
+        "drop-zone-h"
+    };
 
     rsx! {
         div {
-            class: if *active.read() { "drop-zone-h drop-zone-h-active" } else { "drop-zone-h" },
+            class,
             ondragover: move |e| {
-                e.prevent_default();
-                active.set(true);
+                if visible {
+                    e.prevent_default();
+                    active.set(true);
+                }
             },
             ondragleave: move |_| active.set(false),
             ondrop: move |e: Event<DragData>| {
-                e.prevent_default();
-                e.stop_propagation();
-                active.set(false);
-                on_drop.call(position);
+                if visible {
+                    e.prevent_default();
+                    e.stop_propagation();
+                    active.set(false);
+                    on_drop.call(position);
+                }
             },
         }
     }

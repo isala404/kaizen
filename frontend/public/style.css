@@ -232,7 +232,6 @@ a:hover {
 /* === Focus Dock === */
 .focus-dock {
   display: flex;
-  gap: 1rem;
   margin-bottom: 2.5rem;
   min-height: 80px;
   overflow-x: auto;
@@ -257,6 +256,7 @@ a:hover {
   flex: 1 1 0;
   max-width: 300px;
   min-width: 180px;
+  margin-right: 0.5rem;
   min-height: 100px;
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -267,6 +267,10 @@ a:hover {
   position: relative;
   display: flex;
   flex-direction: column;
+}
+
+.focus-card:last-child {
+  margin-right: 0;
 }
 
 .focus-card:hover {
@@ -392,6 +396,14 @@ a:hover {
   border: 2px dashed color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
+.drop-zone-hidden {
+  height: 0;
+  border-width: 0;
+  margin: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .drop-zone-active {
   height: 24px;
   background: color-mix(in srgb, var(--accent) 15%, transparent);
@@ -408,6 +420,15 @@ a:hover {
   flex-shrink: 0;
   transition: all 0.15s;
   border: 2px dashed color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.drop-zone-h-hidden {
+  width: 0;
+  border-width: 0;
+  margin: 0;
+  overflow: hidden;
+  pointer-events: none;
+  min-height: 0;
 }
 
 .drop-zone-h-active {
@@ -474,7 +495,10 @@ a:hover {
 .column-cards {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+}
+
+.column-cards > .task-card {
+  margin-bottom: 0.5rem;
 }
 
 .column-add-btn {
