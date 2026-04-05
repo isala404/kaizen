@@ -22,6 +22,9 @@ pub fn Board(
     on_drag_start: EventHandler<String>,
     on_drag_end: EventHandler<()>,
     on_drop: EventHandler<DropTarget>,
+    on_touch_drag_start: Option<EventHandler<(String, f64, f64)>>,
+    on_touch_drag_move: Option<EventHandler<(f64, f64)>>,
+    on_touch_drag_end: Option<EventHandler<(f64, f64)>>,
 ) -> Element {
     rsx! {
         div { class: "section-label", "BOARD" }
@@ -48,6 +51,9 @@ pub fn Board(
                     on_drag_start,
                     on_drag_end,
                     on_drop,
+                    on_touch_drag_start,
+                    on_touch_drag_move,
+                    on_touch_drag_end,
                 }
             }
         }

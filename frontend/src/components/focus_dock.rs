@@ -14,8 +14,16 @@ pub fn FocusDock(
     on_drag_start: Option<EventHandler<String>>,
     on_drag_end: Option<EventHandler<()>>,
     on_select: Option<EventHandler<String>>,
+    on_touch_drag_start: Option<EventHandler<(String, f64, f64)>>,
+    on_touch_drag_move: Option<EventHandler<(f64, f64)>>,
+    on_touch_drag_end: Option<EventHandler<(f64, f64)>>,
 ) -> Element {
     let mut drag_over = use_signal(|| false);
+    let mut last_tap_time = use_signal(|| 0.0f64);
+    let mut long_press_task = use_signal(|| Option::<dioxus::core::Task>::None);
+    let mut touch_active = use_signal(|| false);
+    let mut touch_start_pos = use_signal(|| (0.0f64, 0.0f64));
+    let mut last_touch_pos = use_signal(|| (0.0f64, 0.0f64));
     let dragging = is_drag_active.unwrap_or(false);
     let count = tasks.len();
 
@@ -39,6 +47,7 @@ pub fn FocusDock(
         div { class: "section-label", "{label}" }
         div {
             class: "{dock_class}",
+            "data-drop-status": "focus_dock",
             ondragover: move |e| {
                 e.prevent_default();
                 drag_over.set(true);
@@ -115,23 +124,85 @@ pub fn FocusDock(
                                     }
                                 }
                             },
-                            onclick: {
+                            ontouchstart: {
                                 let id = task.id.clone();
-                                move |_| {
-                                    if is_focused {
-                                        on_unfocus.call(id.clone());
-                                    } else {
-                                        on_focus.call(id.clone());
+                                let handler = on_touch_drag_start.clone();
+                                move |e| {
+                                    if let Some(ref h) = handler {
+                                        if let Some(touch) = e.touches().first() {
+                                            let coords = touch.client_coordinates();
+                                            touch_start_pos.set((coords.x, coords.y));
+                                            last_touch_pos.set((coords.x, coords.y));
+                                            let id = id.clone();
+                                            let h = h.clone();
+                                            let task = spawn(async move {
+                                                dioxus_sdk::time::sleep(std::time::Duration::from_millis(300)).await;
+                                                touch_active.set(true);
+                                                h.call((id, coords.x, coords.y));
+                                            });
+                                            long_press_task.set(Some(task));
+                                        }
                                     }
                                 }
                             },
-                            oncontextmenu: {
+                            ontouchmove: {
+                                let move_handler = on_touch_drag_move.clone();
+                                move |e| {
+                                    if let Some(touch) = e.touches().first() {
+                                        let coords = touch.client_coordinates();
+                                        last_touch_pos.set((coords.x, coords.y));
+                                        if long_press_task.read().is_some() {
+                                            let (sx, sy) = *touch_start_pos.read();
+                                            let dx = coords.x - sx;
+                                            let dy = coords.y - sy;
+                                            if (dx * dx + dy * dy) > 100.0 {
+                                                if let Some(task) = long_press_task.take() {
+                                                    task.cancel();
+                                                }
+                                            }
+                                            return;
+                                        }
+                                        if *touch_active.read() {
+                                            e.prevent_default();
+                                            if let Some(ref h) = move_handler {
+                                                h.call((coords.x, coords.y));
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            ontouchend: {
+                                let end_handler = on_touch_drag_end.clone();
+                                move |_| {
+                                    if let Some(task) = long_press_task.take() {
+                                        task.cancel();
+                                        return;
+                                    }
+                                    if *touch_active.read() {
+                                        touch_active.set(false);
+                                        if let Some(ref h) = end_handler {
+                                            let pos = *last_touch_pos.read();
+                                            h.call(pos);
+                                        }
+                                    }
+                                }
+                            },
+                            onclick: {
                                 let id = task.id.clone();
-                                let handler = on_select.clone();
-                                move |e: Event<MouseData>| {
-                                    e.prevent_default();
-                                    if let Some(ref h) = handler {
-                                        h.call(id.clone());
+                                let select_handler = on_select.clone();
+                                move |_| {
+                                    let now = chrono::Utc::now().timestamp_millis() as f64;
+                                    let last = *last_tap_time.read();
+                                    last_tap_time.set(now);
+
+                                    if now - last < 350.0 {
+                                        if let Some(ref h) = select_handler {
+                                            h.call(id.clone());
+                                        }
+                                    } else if is_focused {
+                                        on_unfocus.call(id.clone());
+                                    } else {
+                                        on_focus.call(id.clone());
                                     }
                                 }
                             },
@@ -177,6 +248,8 @@ fn DockDropZone(position: i32, visible: bool, on_drop: EventHandler<i32>) -> Ele
     rsx! {
         div {
             class,
+            "data-drop-status": "dock_reorder",
+            "data-drop-position": "{position}",
             ondragover: move |e| {
                 if visible {
                     e.prevent_default();

@@ -19,6 +19,9 @@ pub fn BoardColumn(
     on_drag_start: EventHandler<String>,
     on_drag_end: EventHandler<()>,
     on_drop: EventHandler<DropTarget>,
+    on_touch_drag_start: Option<EventHandler<(String, f64, f64)>>,
+    on_touch_drag_move: Option<EventHandler<(f64, f64)>>,
+    on_touch_drag_end: Option<EventHandler<(f64, f64)>>,
 ) -> Element {
     let mut collapsed = use_persistent(format!("col_collapsed_{label}"), || false);
     let mut show_add = use_signal(|| false);
@@ -61,9 +64,21 @@ pub fn BoardColumn(
         label.clone()
     };
 
+    let col_drop_status = match status {
+        TaskStatus::Inbox => "inbox",
+        TaskStatus::UpNext => "up_next",
+        TaskStatus::Paused => "paused",
+        TaskStatus::Done => "done",
+        TaskStatus::InProgress => "in_progress",
+        TaskStatus::Focused => "focused",
+        TaskStatus::Archived => "archived",
+    };
+
     rsx! {
         div {
             class: "{col_class}",
+            "data-drop-status": col_drop_status,
+            "data-drop-position": "{end_position}",
             ondragover: move |e| {
                 e.prevent_default();
                 drag_over.set(true);
@@ -118,6 +133,9 @@ pub fn BoardColumn(
                                     on_delete,
                                     on_drag_start: on_drag_start,
                                     on_drag_end: on_drag_end,
+                                    on_touch_drag_start,
+                                    on_touch_drag_move,
+                                    on_touch_drag_end,
                                 }
                             }
                         }
@@ -209,9 +227,21 @@ fn CardDropZone(
         "drop-zone"
     };
 
+    let drop_status = match status {
+        TaskStatus::Inbox => "inbox",
+        TaskStatus::UpNext => "up_next",
+        TaskStatus::Paused => "paused",
+        TaskStatus::Done => "done",
+        TaskStatus::InProgress => "in_progress",
+        TaskStatus::Focused => "focused",
+        TaskStatus::Archived => "archived",
+    };
+
     rsx! {
         div {
             class,
+            "data-drop-status": drop_status,
+            "data-drop-position": "{position}",
             ondragover: move |e| {
                 if visible {
                     e.prevent_default();

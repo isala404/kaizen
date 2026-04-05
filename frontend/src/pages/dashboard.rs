@@ -157,6 +157,191 @@ pub fn Dashboard() -> Element {
         dragging_id.set(None);
     };
 
+    // Touch drag state
+    let mut touch_pos = use_signal(|| Option::<(f64, f64)>::None);
+    let mut touch_dragging_title = use_signal(|| Option::<String>::None);
+
+    let on_touch_drag_start = {
+        move |(id, x, y): (String, f64, f64)| {
+            let title = tasks_sig
+                .read()
+                .iter()
+                .find(|t| t.id == id)
+                .map(|t| t.title.clone())
+                .unwrap_or_default();
+            touch_dragging_title.set(Some(title));
+            touch_pos.set(Some((x, y)));
+            dragging_id.set(Some(id));
+        }
+    };
+
+    let on_touch_drag_move = {
+        move |(x, y): (f64, f64)| {
+            touch_pos.set(Some((x, y)));
+        }
+    };
+
+    let on_touch_drag_end = {
+        move |(x, y): (f64, f64)| {
+            touch_pos.set(None);
+            touch_dragging_title.set(None);
+            let _x = x;
+            let _y = y;
+
+            #[cfg(target_arch = "wasm32")]
+            {
+                let drag_id = dragging_id.read().clone();
+                dragging_id.set(None);
+
+                if let Some(task_id) = drag_id {
+                    if let Some(window) = web_sys::window()
+                        && let Some(doc) = window.document()
+                    {
+                        let mut target_el = doc.element_from_point(_x as f32, _y as f32);
+
+                        // Walk up the DOM to find an element with data-drop-status
+                        let mut drop_status = None;
+                        let mut drop_position = None;
+                        while let Some(el) = target_el {
+                            if let Some(status) = el.get_attribute("data-drop-status") {
+                                drop_status = Some(status);
+                                drop_position = el
+                                    .get_attribute("data-drop-position")
+                                    .and_then(|p| p.parse::<i32>().ok());
+                                break;
+                            }
+                            target_el = el.parent_element();
+                        }
+
+                        if let Some(status_str) = drop_status {
+                            let is_focused = tasks_sig
+                                .read()
+                                .iter()
+                                .any(|t| t.id == task_id && t.status == TaskStatus::Focused);
+
+                            match status_str.as_str() {
+                                "focus_dock" => {
+                                    let max_pos = tasks_sig
+                                        .read()
+                                        .iter()
+                                        .filter(|t| {
+                                            t.status == TaskStatus::Focused
+                                                || t.status == TaskStatus::InProgress
+                                        })
+                                        .map(|t| t.position)
+                                        .max()
+                                        .unwrap_or(0);
+                                    let new_pos = max_pos + 10_000;
+
+                                    {
+                                        let mut map = pending_moves.read().clone();
+                                        map.insert(
+                                            task_id.clone(),
+                                            (TaskStatus::InProgress, new_pos),
+                                        );
+                                        pending_moves.set(map);
+                                    }
+
+                                    let reorder = reorder.clone();
+                                    spawn(async move {
+                                        let _ = reorder
+                                            .call(ReorderTaskInput::new(
+                                                task_id,
+                                                TaskStatus::InProgress,
+                                                new_pos,
+                                            ))
+                                            .await;
+                                    });
+                                }
+                                "dock_reorder" => {
+                                    if let Some(position) = drop_position {
+                                        let status = tasks_sig
+                                            .read()
+                                            .iter()
+                                            .find(|t| t.id == task_id)
+                                            .map(|t| t.status.clone());
+                                        let target_status = match status {
+                                            Some(
+                                                TaskStatus::Focused | TaskStatus::InProgress,
+                                            ) => status.unwrap(),
+                                            _ => TaskStatus::InProgress,
+                                        };
+
+                                        {
+                                            let mut map = pending_moves.read().clone();
+                                            map.insert(
+                                                task_id.clone(),
+                                                (target_status.clone(), position),
+                                            );
+                                            pending_moves.set(map);
+                                        }
+
+                                        let reorder = reorder.clone();
+                                        spawn(async move {
+                                            let _ = reorder
+                                                .call(ReorderTaskInput::new(
+                                                    task_id,
+                                                    target_status,
+                                                    position,
+                                                ))
+                                                .await;
+                                        });
+                                    }
+                                }
+                                _ => {
+                                    let target_status = match status_str.as_str() {
+                                        "inbox" => Some(TaskStatus::Inbox),
+                                        "up_next" => Some(TaskStatus::UpNext),
+                                        "paused" => Some(TaskStatus::Paused),
+                                        "done" => Some(TaskStatus::Done),
+                                        "in_progress" => Some(TaskStatus::InProgress),
+                                        "focused" => Some(TaskStatus::Focused),
+                                        _ => None,
+                                    };
+
+                                    if let (Some(status), Some(position)) =
+                                        (target_status, drop_position)
+                                    {
+                                        {
+                                            let mut map = pending_moves.read().clone();
+                                            map.insert(
+                                                task_id.clone(),
+                                                (status.clone(), position),
+                                            );
+                                            pending_moves.set(map);
+                                        }
+
+                                        let reorder = reorder.clone();
+                                        let unfocus = unfocus.clone();
+                                        spawn(async move {
+                                            if is_focused {
+                                                let _ = unfocus
+                                                    .call(UnfocusTaskInput::new(
+                                                        task_id.clone(),
+                                                    ))
+                                                    .await;
+                                            }
+                                            let _ = reorder
+                                                .call(ReorderTaskInput::new(
+                                                    task_id, status, position,
+                                                ))
+                                                .await;
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                dragging_id.set(None);
+            }
+        }
+    };
+
     let on_drop = {
         let reorder = reorder.clone();
         let unfocus = unfocus.clone();
@@ -399,6 +584,9 @@ pub fn Dashboard() -> Element {
                 on_drag_start,
                 on_drag_end,
                 on_select,
+                on_touch_drag_start: on_touch_drag_start,
+                on_touch_drag_move: on_touch_drag_move,
+                on_touch_drag_end: on_touch_drag_end,
             }
 
             Board {
@@ -412,12 +600,20 @@ pub fn Dashboard() -> Element {
                 on_drag_start,
                 on_drag_end,
                 on_drop,
+                on_touch_drag_start: on_touch_drag_start,
+                on_touch_drag_move: on_touch_drag_move,
+                on_touch_drag_end: on_touch_drag_end,
             }
 
-            button {
-                class: "fab",
-                onclick: move |_| show_capture.set(true),
-                "+"
+            // Touch drag ghost card
+            if let Some((x, y)) = *touch_pos.read() {
+                if let Some(ref title) = *touch_dragging_title.read() {
+                    div {
+                        class: "touch-drag-ghost",
+                        style: "left: {x}px; top: {y}px;",
+                        "{title}"
+                    }
+                }
             }
 
             if let Some(task) = selected_task {
