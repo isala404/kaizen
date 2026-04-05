@@ -1,12 +1,43 @@
 use std::collections::HashMap;
 
 use dioxus::prelude::*;
+use js_sys::Function;
+use pulldown_cmark::{Options, Parser, html};
+use wasm_bindgen::JsCast;
+use wasm_bindgen::JsValue;
 
 use crate::forge::{
     FieldDefinition, FieldValueType, SetTaskFieldInput, Task, TaskField, TaskStatus,
     UpdateTaskInput, use_set_task_field,
 };
 use crate::time_utils;
+
+fn highlight_code_blocks() {
+    spawn(async {
+        // hljs loads async from CDN, give it a moment
+        gloo_timers::future::TimeoutFuture::new(50).await;
+        if let Some(window) = web_sys::window() {
+            if let Ok(hljs) = js_sys::Reflect::get(&window, &JsValue::from_str("hljs")) {
+                if let Ok(func) = js_sys::Reflect::get(&hljs, &JsValue::from_str("highlightAll")) {
+                    if let Ok(f) = func.dyn_into::<Function>() {
+                        let _ = f.call0(&hljs);
+                    }
+                }
+            }
+        }
+    });
+}
+
+fn render_markdown(input: &str) -> String {
+    let opts = Options::ENABLE_STRIKETHROUGH
+        | Options::ENABLE_TASKLISTS
+        | Options::ENABLE_TABLES
+        | Options::ENABLE_FOOTNOTES;
+    let parser = Parser::new_ext(input, opts);
+    let mut html_output = String::new();
+    html::push_html(&mut html_output, parser);
+    html_output
+}
 
 #[component]
 pub fn DetailPanel(
@@ -22,6 +53,34 @@ pub fn DetailPanel(
     let mut desc_draft = use_signal(|| task.description.clone());
     let mut title_draft = use_signal(|| task.title.clone());
     let mut field_drafts = use_signal(HashMap::<String, String>::new);
+    let mut fullscreen = use_signal(|| {
+        web_sys::window()
+            .and_then(|w| w.local_storage().ok().flatten())
+            .and_then(|s| s.get_item("detail_fullscreen").ok().flatten())
+            .is_some_and(|v| v == "true")
+    });
+
+    let desc_for_effect = task.description.clone();
+    let is_editing = *editing_desc.read();
+    use_effect(move || {
+        if !is_editing && !desc_for_effect.is_empty() {
+            highlight_code_blocks();
+        }
+    });
+
+    let save_desc = {
+        let id = task.id.clone();
+        let desc = task.description.clone();
+        move || {
+            if *editing_desc.read() {
+                editing_desc.set(false);
+                let new_desc = desc_draft.read().clone();
+                if new_desc != desc {
+                    on_update.call(UpdateTaskInput::new(id.clone()).description(new_desc));
+                }
+            }
+        }
+    };
 
     let time_str = time_utils::format_duration(task.time_spent_secs);
     let due_date_val = task
@@ -36,18 +95,46 @@ pub fn DetailPanel(
     rsx! {
         div {
             class: "detail-overlay",
-            onclick: move |_| on_close.call(()),
+            onclick: {
+                let mut save_desc = save_desc.clone();
+                move |_| {
+                    save_desc();
+                    on_close.call(());
+                }
+            },
         }
         div {
-            class: "detail-panel",
-            onclick: move |e| e.stop_propagation(),
+            class: if *fullscreen.read() { "detail-panel detail-panel-full" } else { "detail-panel" },
+            onclick: {
+                let mut save_desc = save_desc.clone();
+                move |e: Event<MouseData>| {
+                    e.stop_propagation();
+                    save_desc();
+                }
+            },
 
             div { class: "detail-header",
                 span {}
-                button {
-                    class: "detail-close",
-                    onclick: move |_| on_close.call(()),
-                    "×"
+                div { class: "detail-header-actions",
+                    button {
+                        class: "detail-expand",
+                        title: if *fullscreen.read() { "Exit full screen" } else { "Full screen" },
+                        onclick: move |_| {
+                            let next = !*fullscreen.read();
+                            fullscreen.set(next);
+                            if let Some(storage) = web_sys::window()
+                                .and_then(|w| w.local_storage().ok().flatten())
+                            {
+                                let _ = storage.set_item("detail_fullscreen", if next { "true" } else { "false" });
+                            }
+                        },
+                        if *fullscreen.read() { "⊟" } else { "⊞" }
+                    }
+                    button {
+                        class: "detail-close",
+                        onclick: move |_| on_close.call(()),
+                        "×"
+                    }
                 }
             }
 
@@ -277,39 +364,41 @@ pub fn DetailPanel(
             }
 
             // Description
-            div { class: "detail-section",
+            div { class: "detail-section detail-section-desc",
                 label { class: "detail-label", "Description" }
                 if *editing_desc.read() {
                     textarea {
                         class: "detail-desc-textarea",
+                        onclick: move |e: Event<MouseData>| e.stop_propagation(),
                         value: "{desc_draft}",
-                        rows: 8,
+                        rows: desc_draft.read().lines().count().max(8) as i64,
                         placeholder: "Add a description...",
                         oninput: move |e| desc_draft.set(e.value()),
-                        onblur: {
-                            let id = task.id.clone();
-                            move |_| {
-                                editing_desc.set(false);
-                                let new_desc = desc_draft.read().clone();
-                                if new_desc != task.description {
-                                    on_update.call(
-                                        UpdateTaskInput::new(id.clone()).description(new_desc),
-                                    );
-                                }
-                            }
-                        },
                     }
                 } else if task.description.is_empty() {
                     p {
                         class: "detail-placeholder",
-                        onclick: move |_| editing_desc.set(true),
+                        onclick: move |e: Event<MouseData>| {
+                            e.stop_propagation();
+                            editing_desc.set(true);
+                        },
                         "Add a description..."
                     }
                 } else {
-                    p {
-                        class: "detail-description",
-                        onclick: move |_| editing_desc.set(true),
-                        "{task.description}"
+                    document::Link {
+                        rel: "stylesheet",
+                        href: "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css",
+                    }
+                    document::Script {
+                        src: "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js",
+                    }
+                    div {
+                        class: "detail-description markdown-body",
+                        onclick: move |e: Event<MouseData>| {
+                            e.stop_propagation();
+                            editing_desc.set(true);
+                        },
+                        dangerous_inner_html: render_markdown(&task.description),
                     }
                 }
             }

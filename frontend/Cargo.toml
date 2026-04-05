@@ -10,7 +10,9 @@ forge-dioxus = { git = "https://github.com/isala404/forge", rev = "07e1a972d1cbf
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 js-sys = "0.3"
+wasm-bindgen = "0.2"
 web-sys = { version = "0.3", features = ["Window", "Document", "HtmlElement", "HtmlInputElement", "MediaQueryList", "Storage"] }
 gloo-timers = { version = "0.3", features = ["futures"] }
+pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
 
 [workspace]

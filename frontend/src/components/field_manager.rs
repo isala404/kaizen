@@ -5,6 +5,16 @@ use crate::forge::{
     use_create_field_definition, use_delete_field_definition, use_list_field_definitions_live,
 };
 
+fn random_color() -> String {
+    const PALETTE: &[&str] = &[
+        "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899",
+        "#f43f5e", "#ef4444", "#f97316", "#eab308", "#84cc16",
+        "#22c55e", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6",
+    ];
+    let idx = (js_sys::Math::random() * PALETTE.len() as f64) as usize % PALETTE.len();
+    PALETTE[idx].to_string()
+}
+
 #[component]
 pub fn FieldManager(on_close: EventHandler<()>) -> Element {
     let fields_state = use_list_field_definitions_live();
@@ -13,7 +23,7 @@ pub fn FieldManager(on_close: EventHandler<()>) -> Element {
 
     let mut new_key = use_signal(String::new);
     let mut new_type = use_signal(|| "text".to_string());
-    let mut new_color = use_signal(|| "#6366f1".to_string());
+    let mut new_color = use_signal(random_color);
     let mut new_options = use_signal(String::new);
 
     let fields = fields_state.data.clone().unwrap_or_default();
@@ -61,6 +71,7 @@ pub fn FieldManager(on_close: EventHandler<()>) -> Element {
 
             new_key.set(String::new());
             new_options.set(String::new());
+            new_color.set(random_color());
         }
     };
 

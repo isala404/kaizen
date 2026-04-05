@@ -1092,6 +1092,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 [[package]]
 name = "forge-dioxus"
 version = "0.8.3"
+source = "git+https://github.com/isala404/forge?rev=07e1a972d1cbfafc0bedb89764ee59c0b8ca8c5a#07e1a972d1cbfafc0bedb89764ee59c0b8ca8c5a"
 dependencies = [
  "dioxus",
  "dirs",
@@ -1674,8 +1675,10 @@ dependencies = [
  "forge-dioxus",
  "gloo-timers",
  "js-sys",
+ "pulldown-cmark",
  "serde",
  "serde_json",
+ "wasm-bindgen",
  "web-sys",
 ]
 
@@ -2142,6 +2145,24 @@ dependencies = [
  "idna",
  "psl-types",
 ]
+
+[[package]]
+name = "pulldown-cmark"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f86ba2052aebccc42cbbb3ed234b8b13ce76f75c3551a303cb2bcffcff12bb14"
+dependencies = [
+ "bitflags",
+ "memchr",
+ "pulldown-cmark-escape",
+ "unicase",
+]
+
+[[package]]
+name = "pulldown-cmark-escape"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "007d8adb5ddab6f8e3f491ac63566a7d5002cc7ed73901f72057943fa71ae1ae"
 
 [[package]]
 name = "quinn"
