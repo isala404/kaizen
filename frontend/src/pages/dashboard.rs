@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 
 use crate::components::{
     Board, DetailPanel, DropTarget, FieldManager, FocusDock, Header, QuickCapture,
-    UndoAction, UndoToast,
+    TouchHoverZone, UndoAction, UndoToast,
 };
 use crate::forge::{
     CreateTaskInput, DeleteTaskInput, FieldDefinition, FocusTaskInput, ReorderTaskInput, Task,
@@ -12,6 +12,18 @@ use crate::forge::{
     use_focus_task, use_list_all_task_fields_live, use_list_field_definitions_live,
     use_list_tasks_live, use_reorder_task, use_unfocus_task, use_update_task,
 };
+
+fn hit_test_drop_zone_js(x: f64, y: f64) -> String {
+    format!(
+        r#"var el = document.elementFromPoint({x}, {y});
+        while (el) {{
+            var s = el.getAttribute('data-drop-status');
+            if (s) {{ return [s, el.getAttribute('data-drop-position')]; }}
+            el = el.parentElement;
+        }}
+        return null;"#
+    )
+}
 
 const COLUMN_STATUSES: [TaskStatus; 4] = [
     TaskStatus::Inbox,
@@ -50,6 +62,10 @@ pub fn Dashboard() -> Element {
 
     let field_defs: Vec<FieldDefinition> = field_defs_state.data.clone().unwrap_or_default();
     let all_task_fields: Vec<TaskField> = task_fields_state.data.clone().unwrap_or_default();
+
+    // Touch hover zone for non-HTML5-drag platforms (iOS native, mobile web)
+    let mut touch_hover_zone = use_signal(|| Option::<(String, i32)>::None);
+    use_context_provider(|| TouchHoverZone(touch_hover_zone));
 
     // Pending moves: task_id → (new_status, new_position).
     // Applied on top of server data so optimistic updates survive
@@ -160,6 +176,7 @@ pub fn Dashboard() -> Element {
     // Touch drag state
     let mut touch_pos = use_signal(|| Option::<(f64, f64)>::None);
     let mut touch_dragging_title = use_signal(|| Option::<String>::None);
+    let mut hover_generation = use_signal(|| 0u64);
 
     let on_touch_drag_start = {
         move |(id, x, y): (String, f64, f64)| {
@@ -175,169 +192,174 @@ pub fn Dashboard() -> Element {
         }
     };
 
-    let on_touch_drag_move = {
-        move |(x, y): (f64, f64)| {
-            touch_pos.set(Some((x, y)));
-        }
+    let on_touch_drag_move = move |(x, y): (f64, f64)| {
+        touch_pos.set(Some((x, y)));
+
+        let tick = hover_generation() + 1;
+        hover_generation.set(tick);
+
+        spawn(async move {
+            if let Ok(val) = document::eval(&hit_test_drop_zone_js(x, y)).await {
+                if hover_generation() != tick {
+                    return;
+                }
+                if let Some(arr) = val.as_array() {
+                    if let (Some(status), Some(pos_str)) = (
+                        arr.first().and_then(|v| v.as_str()),
+                        arr.get(1).and_then(|v| v.as_str()),
+                    ) {
+                        if let Ok(pos) = pos_str.parse::<i32>() {
+                            touch_hover_zone.set(Some((status.to_string(), pos)));
+                            return;
+                        }
+                    }
+                }
+                touch_hover_zone.set(None);
+            }
+        });
     };
 
-    let on_touch_drag_end = {
-        move |(x, y): (f64, f64)| {
-            touch_pos.set(None);
-            touch_dragging_title.set(None);
-            let _x = x;
-            let _y = y;
+    let process_touch_drop = {
+        let reorder = reorder.clone();
+        let unfocus = unfocus.clone();
+        Callback::new(move |(task_id, status_str, drop_position): (String, String, Option<i32>)| {
+            let is_focused = tasks_sig
+                .read()
+                .iter()
+                .any(|t| t.id == task_id && t.status == TaskStatus::Focused);
 
+            match status_str.as_str() {
+                "focus_dock" => {
+                    let max_pos = tasks_sig
+                        .read()
+                        .iter()
+                        .filter(|t| {
+                            t.status == TaskStatus::Focused || t.status == TaskStatus::InProgress
+                        })
+                        .map(|t| t.position)
+                        .max()
+                        .unwrap_or(0);
+                    let new_pos = max_pos + 10_000;
+
+                    {
+                        let mut map = pending_moves.read().clone();
+                        map.insert(task_id.clone(), (TaskStatus::InProgress, new_pos));
+                        pending_moves.set(map);
+                    }
+
+                    let reorder = reorder.clone();
+                    spawn(async move {
+                        let _ = reorder
+                            .call(ReorderTaskInput::new(task_id, TaskStatus::InProgress, new_pos))
+                            .await;
+                    });
+                }
+                "dock_reorder" => {
+                    if let Some(position) = drop_position {
+                        let status = tasks_sig
+                            .read()
+                            .iter()
+                            .find(|t| t.id == task_id)
+                            .map(|t| t.status.clone());
+                        let target_status = match status {
+                            Some(TaskStatus::Focused | TaskStatus::InProgress) => status.unwrap(),
+                            _ => TaskStatus::InProgress,
+                        };
+
+                        {
+                            let mut map = pending_moves.read().clone();
+                            map.insert(task_id.clone(), (target_status.clone(), position));
+                            pending_moves.set(map);
+                        }
+
+                        let reorder = reorder.clone();
+                        spawn(async move {
+                            let _ = reorder
+                                .call(ReorderTaskInput::new(task_id, target_status, position))
+                                .await;
+                        });
+                    }
+                }
+                _ => {
+                    let target_status = match status_str.as_str() {
+                        "inbox" => Some(TaskStatus::Inbox),
+                        "up_next" => Some(TaskStatus::UpNext),
+                        "paused" => Some(TaskStatus::Paused),
+                        "done" => Some(TaskStatus::Done),
+                        "in_progress" => Some(TaskStatus::InProgress),
+                        "focused" => Some(TaskStatus::Focused),
+                        _ => None,
+                    };
+
+                    if let (Some(status), Some(position)) = (target_status, drop_position) {
+                        {
+                            let mut map = pending_moves.read().clone();
+                            map.insert(task_id.clone(), (status.clone(), position));
+                            pending_moves.set(map);
+                        }
+
+                        let reorder = reorder.clone();
+                        let unfocus = unfocus.clone();
+                        spawn(async move {
+                            if is_focused {
+                                let _ =
+                                    unfocus.call(UnfocusTaskInput::new(task_id.clone())).await;
+                            }
+                            let _ = reorder
+                                .call(ReorderTaskInput::new(task_id, status, position))
+                                .await;
+                        });
+                    }
+                }
+            }
+        })
+    };
+
+    let on_touch_drag_end = move |(_x, _y): (f64, f64)| {
+        touch_pos.set(None);
+        touch_dragging_title.set(None);
+
+        let drag_id = dragging_id.read().clone();
+        dragging_id.set(None);
+
+        // Read hover zone before clearing so we know where the drop landed
+        let hover = touch_hover_zone.read().clone();
+        touch_hover_zone.set(None);
+
+        if let Some(task_id) = drag_id {
             #[cfg(target_arch = "wasm32")]
             {
-                let drag_id = dragging_id.read().clone();
-                dragging_id.set(None);
+                // Synchronous hit-test via web_sys (more reliable than async eval)
+                if let Some(window) = web_sys::window()
+                    && let Some(doc) = window.document()
+                {
+                    let mut target_el = doc.element_from_point(_x as f32, _y as f32);
 
-                if let Some(task_id) = drag_id {
-                    if let Some(window) = web_sys::window()
-                        && let Some(doc) = window.document()
-                    {
-                        let mut target_el = doc.element_from_point(_x as f32, _y as f32);
-
-                        // Walk up the DOM to find an element with data-drop-status
-                        let mut drop_status = None;
-                        let mut drop_position = None;
-                        while let Some(el) = target_el {
-                            if let Some(status) = el.get_attribute("data-drop-status") {
-                                drop_status = Some(status);
-                                drop_position = el
-                                    .get_attribute("data-drop-position")
-                                    .and_then(|p| p.parse::<i32>().ok());
-                                break;
-                            }
-                            target_el = el.parent_element();
+                    let mut drop_status = None;
+                    let mut drop_position = None;
+                    while let Some(el) = target_el {
+                        if let Some(status) = el.get_attribute("data-drop-status") {
+                            drop_status = Some(status);
+                            drop_position = el
+                                .get_attribute("data-drop-position")
+                                .and_then(|p| p.parse::<i32>().ok());
+                            break;
                         }
+                        target_el = el.parent_element();
+                    }
 
-                        if let Some(status_str) = drop_status {
-                            let is_focused = tasks_sig
-                                .read()
-                                .iter()
-                                .any(|t| t.id == task_id && t.status == TaskStatus::Focused);
-
-                            match status_str.as_str() {
-                                "focus_dock" => {
-                                    let max_pos = tasks_sig
-                                        .read()
-                                        .iter()
-                                        .filter(|t| {
-                                            t.status == TaskStatus::Focused
-                                                || t.status == TaskStatus::InProgress
-                                        })
-                                        .map(|t| t.position)
-                                        .max()
-                                        .unwrap_or(0);
-                                    let new_pos = max_pos + 10_000;
-
-                                    {
-                                        let mut map = pending_moves.read().clone();
-                                        map.insert(
-                                            task_id.clone(),
-                                            (TaskStatus::InProgress, new_pos),
-                                        );
-                                        pending_moves.set(map);
-                                    }
-
-                                    let reorder = reorder.clone();
-                                    spawn(async move {
-                                        let _ = reorder
-                                            .call(ReorderTaskInput::new(
-                                                task_id,
-                                                TaskStatus::InProgress,
-                                                new_pos,
-                                            ))
-                                            .await;
-                                    });
-                                }
-                                "dock_reorder" => {
-                                    if let Some(position) = drop_position {
-                                        let status = tasks_sig
-                                            .read()
-                                            .iter()
-                                            .find(|t| t.id == task_id)
-                                            .map(|t| t.status.clone());
-                                        let target_status = match status {
-                                            Some(
-                                                TaskStatus::Focused | TaskStatus::InProgress,
-                                            ) => status.unwrap(),
-                                            _ => TaskStatus::InProgress,
-                                        };
-
-                                        {
-                                            let mut map = pending_moves.read().clone();
-                                            map.insert(
-                                                task_id.clone(),
-                                                (target_status.clone(), position),
-                                            );
-                                            pending_moves.set(map);
-                                        }
-
-                                        let reorder = reorder.clone();
-                                        spawn(async move {
-                                            let _ = reorder
-                                                .call(ReorderTaskInput::new(
-                                                    task_id,
-                                                    target_status,
-                                                    position,
-                                                ))
-                                                .await;
-                                        });
-                                    }
-                                }
-                                _ => {
-                                    let target_status = match status_str.as_str() {
-                                        "inbox" => Some(TaskStatus::Inbox),
-                                        "up_next" => Some(TaskStatus::UpNext),
-                                        "paused" => Some(TaskStatus::Paused),
-                                        "done" => Some(TaskStatus::Done),
-                                        "in_progress" => Some(TaskStatus::InProgress),
-                                        "focused" => Some(TaskStatus::Focused),
-                                        _ => None,
-                                    };
-
-                                    if let (Some(status), Some(position)) =
-                                        (target_status, drop_position)
-                                    {
-                                        {
-                                            let mut map = pending_moves.read().clone();
-                                            map.insert(
-                                                task_id.clone(),
-                                                (status.clone(), position),
-                                            );
-                                            pending_moves.set(map);
-                                        }
-
-                                        let reorder = reorder.clone();
-                                        let unfocus = unfocus.clone();
-                                        spawn(async move {
-                                            if is_focused {
-                                                let _ = unfocus
-                                                    .call(UnfocusTaskInput::new(
-                                                        task_id.clone(),
-                                                    ))
-                                                    .await;
-                                            }
-                                            let _ = reorder
-                                                .call(ReorderTaskInput::new(
-                                                    task_id, status, position,
-                                                ))
-                                                .await;
-                                        });
-                                    }
-                                }
-                            }
-                        }
+                    if let Some(status_str) = drop_status {
+                        process_touch_drop.call((task_id, status_str, drop_position));
                     }
                 }
             }
 
             #[cfg(not(target_arch = "wasm32"))]
             {
-                dragging_id.set(None);
+                // Use the pre-computed hover zone from the last touch move
+                if let Some((status_str, position)) = hover {
+                    process_touch_drop.call((task_id, status_str, Some(position)));
+                }
             }
         }
     };

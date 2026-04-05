@@ -18,10 +18,30 @@ pub use quick_capture::QuickCapture;
 pub use task_card::TaskCard;
 pub use undo_toast::{UndoAction, UndoToast};
 
+use dioxus::prelude::*;
+
 use crate::forge::TaskStatus;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DropTarget {
     pub status: TaskStatus,
     pub position: i32,
+}
+
+/// Shared context for touch-based hover detection on drop zones.
+/// Updated during touch drag move via document::eval hit-testing.
+#[derive(Clone, Copy)]
+pub struct TouchHoverZone(pub Signal<Option<(String, i32)>>);
+
+impl TouchHoverZone {
+    pub fn matches(&self, status: &str, position: i32) -> bool {
+        self.0
+            .read()
+            .as_ref()
+            .is_some_and(|(s, p)| s == status && *p == position)
+    }
+
+    pub fn matches_status(&self, status: &str) -> bool {
+        self.0.read().as_ref().is_some_and(|(s, _)| s == status)
+    }
 }

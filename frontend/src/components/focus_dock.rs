@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 
+use crate::components::TouchHoverZone;
 use crate::forge::{Task, TaskStatus};
 use crate::time_utils;
 
@@ -27,8 +28,11 @@ pub fn FocusDock(
     let dragging = is_drag_active.unwrap_or(false);
     let count = tasks.len();
 
+    let touch_hover = try_consume_context::<TouchHoverZone>();
+    let is_touch_hover_dock = touch_hover.is_some_and(|h| h.matches_status("focus_dock"));
+
     let mut dock_classes = vec!["focus-dock"];
-    if *drag_over.read() && dragging {
+    if (*drag_over.read() || is_touch_hover_dock) && dragging {
         dock_classes.push("focus-dock-drag-over");
     }
     let dock_class = dock_classes.join(" ");
@@ -237,9 +241,12 @@ pub fn FocusDock(
 fn DockDropZone(position: i32, visible: bool, on_drop: EventHandler<i32>) -> Element {
     let mut active = use_signal(|| false);
 
+    let touch_hover = try_consume_context::<TouchHoverZone>();
+    let is_touch_active = touch_hover.is_some_and(|h| h.matches("dock_reorder", position));
+
     let class = if !visible {
         "drop-zone-h drop-zone-h-hidden"
-    } else if *active.read() {
+    } else if *active.read() || is_touch_active {
         "drop-zone-h drop-zone-h-active"
     } else {
         "drop-zone-h"

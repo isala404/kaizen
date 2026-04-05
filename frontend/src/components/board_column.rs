@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_sdk::storage::use_persistent;
 
-use crate::components::{DropTarget, TaskCard};
+use crate::components::{DropTarget, TaskCard, TouchHoverZone};
 use crate::forge::{Task, TaskStatus};
 use crate::time_utils;
 
@@ -46,11 +46,25 @@ pub fn BoardColumn(
     let end_position = tasks.last().map(|t| t.position + 10_000).unwrap_or(10_000);
     let mut drag_over = use_signal(|| false);
 
+    let col_drop_status = match status {
+        TaskStatus::Inbox => "inbox",
+        TaskStatus::UpNext => "up_next",
+        TaskStatus::Paused => "paused",
+        TaskStatus::Done => "done",
+        TaskStatus::InProgress => "in_progress",
+        TaskStatus::Focused => "focused",
+        TaskStatus::Archived => "archived",
+    };
+
+    let touch_hover = try_consume_context::<TouchHoverZone>();
+    let is_touch_hover_col =
+        touch_hover.is_some_and(|h| h.matches_status(col_drop_status)) && is_dragging;
+
     let mut col_classes = vec!["board-column"];
     if is_focused {
         col_classes.push("board-column-focused");
     }
-    if *drag_over.read() && is_dragging {
+    if (*drag_over.read() || is_touch_hover_col) && is_dragging {
         col_classes.push("board-column-drag-over");
     }
     if *collapsed.read() {
@@ -62,16 +76,6 @@ pub fn BoardColumn(
         "Done today".to_string()
     } else {
         label.clone()
-    };
-
-    let col_drop_status = match status {
-        TaskStatus::Inbox => "inbox",
-        TaskStatus::UpNext => "up_next",
-        TaskStatus::Paused => "paused",
-        TaskStatus::Done => "done",
-        TaskStatus::InProgress => "in_progress",
-        TaskStatus::Focused => "focused",
-        TaskStatus::Archived => "archived",
     };
 
     rsx! {
@@ -219,14 +223,6 @@ fn CardDropZone(
 ) -> Element {
     let mut active = use_signal(|| false);
 
-    let class = if !visible {
-        "drop-zone drop-zone-hidden"
-    } else if *active.read() {
-        "drop-zone drop-zone-active"
-    } else {
-        "drop-zone"
-    };
-
     let drop_status = match status {
         TaskStatus::Inbox => "inbox",
         TaskStatus::UpNext => "up_next",
@@ -235,6 +231,17 @@ fn CardDropZone(
         TaskStatus::InProgress => "in_progress",
         TaskStatus::Focused => "focused",
         TaskStatus::Archived => "archived",
+    };
+
+    let touch_hover = try_consume_context::<TouchHoverZone>();
+    let is_touch_active = touch_hover.is_some_and(|h| h.matches(drop_status, position));
+
+    let class = if !visible {
+        "drop-zone drop-zone-hidden"
+    } else if *active.read() || is_touch_active {
+        "drop-zone drop-zone-active"
+    } else {
+        "drop-zone"
     };
 
     rsx! {
