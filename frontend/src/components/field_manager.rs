@@ -1,20 +1,12 @@
 use dioxus::prelude::*;
 
-use crate::forge::{
-    CreateFieldDefinitionInput, DeleteFieldDefinitionInput, FieldValueType,
-    use_create_field_definition, use_delete_field_definition, use_list_field_definitions_live,
+use crate::field_utils::{
+    format_field_value_type, parse_field_options, parse_field_value_type, random_field_color,
 };
-
-fn random_color() -> String {
-    use rand::Rng;
-    const PALETTE: &[&str] = &[
-        "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899",
-        "#f43f5e", "#ef4444", "#f97316", "#eab308", "#84cc16",
-        "#22c55e", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6",
-    ];
-    let idx = rand::rng().random_range(0..PALETTE.len());
-    PALETTE[idx].to_string()
-}
+use crate::forge::{
+    CreateFieldDefinitionInput, DeleteFieldDefinitionInput, use_create_field_definition,
+    use_delete_field_definition, use_list_field_definitions_live,
+};
 
 #[component]
 pub fn FieldManager(on_close: EventHandler<()>) -> Element {
@@ -24,7 +16,7 @@ pub fn FieldManager(on_close: EventHandler<()>) -> Element {
 
     let mut new_key = use_signal(String::new);
     let mut new_type = use_signal(|| "text".to_string());
-    let mut new_color = use_signal(random_color);
+    let mut new_color = use_signal(random_field_color);
     let mut new_options = use_signal(String::new);
 
     let fields = fields_state.data.clone().unwrap_or_default();
@@ -36,27 +28,9 @@ pub fn FieldManager(on_close: EventHandler<()>) -> Element {
             if key.is_empty() {
                 return;
             }
-            let vt = match new_type.read().as_str() {
-                "enum" => FieldValueType::Enum,
-                "bool" => FieldValueType::Bool,
-                "int" => FieldValueType::Int,
-                "decimal" => FieldValueType::Decimal,
-                "list" => FieldValueType::List,
-                "url" => FieldValueType::Url,
-                _ => FieldValueType::Text,
-            };
+            let vt = parse_field_value_type(new_type.read().as_str());
             let color = Some(new_color.read().clone());
-            let options = if vt == FieldValueType::Enum {
-                let opts: Vec<String> = new_options
-                    .read()
-                    .split(',')
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .collect();
-                Some(opts)
-            } else {
-                None
-            };
+            let options = parse_field_options(&vt, new_options.read().as_str());
 
             let create = create.clone();
             spawn(async move {
@@ -72,7 +46,7 @@ pub fn FieldManager(on_close: EventHandler<()>) -> Element {
 
             new_key.set(String::new());
             new_options.set(String::new());
-            new_color.set(random_color());
+            new_color.set(random_field_color());
         }
     };
 
@@ -92,7 +66,7 @@ pub fn FieldManager(on_close: EventHandler<()>) -> Element {
                 for field in &fields {
                     div { class: "field-list-item",
                         span { class: "field-list-key", "{field.key}" }
-                        span { class: "field-list-type", "{format_type(&field.value_type)}" }
+                        span { class: "field-list-type", "{format_field_value_type(&field.value_type)}" }
                         if let Some(ref opts) = field.options {
                             span { class: "field-list-opts", "{opts.join(\", \")}" }
                         }
@@ -157,17 +131,5 @@ pub fn FieldManager(on_close: EventHandler<()>) -> Element {
                 }
             }
         }
-    }
-}
-
-fn format_type(vt: &FieldValueType) -> &'static str {
-    match vt {
-        FieldValueType::Text => "text",
-        FieldValueType::Enum => "enum",
-        FieldValueType::Bool => "bool",
-        FieldValueType::Int => "int",
-        FieldValueType::Decimal => "decimal",
-        FieldValueType::List => "list",
-        FieldValueType::Url => "url",
     }
 }

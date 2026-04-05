@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+pub const USER_COLUMNS: &str = "id, email, name, password_hash, created_at, updated_at";
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub(crate) struct User {
     pub id: Uuid,

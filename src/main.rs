@@ -2,6 +2,9 @@ use forge::prelude::*;
 
 mod functions;
 mod schema;
+mod support;
+#[cfg(test)]
+mod test_support;
 
 #[cfg(feature = "embedded-frontend")]
 #[derive(rust_embed::Embed)]

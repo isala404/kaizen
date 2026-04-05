@@ -3,7 +3,10 @@ use forge::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::schema::{Task, TaskStatus};
+use crate::{
+    schema::{TASK_COLUMNS, Task, TaskStatus},
+    support::{next_position, required_trimmed},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateTaskInput {
@@ -43,19 +46,36 @@ pub struct GetTaskInput {
     pub id: Uuid,
 }
 
+async fn find_task_for_user<'a, E>(
+    executor: E,
+    task_id: Uuid,
+    user_id: Uuid,
+) -> Result<Option<Task>>
+where
+    E: sqlx::PgExecutor<'a>,
+{
+    let query = format!("SELECT {TASK_COLUMNS} FROM tasks WHERE id = $1 AND user_id = $2");
+
+    let task = sqlx::query_as::<_, Task>(&query)
+        .bind(task_id)
+        .bind(user_id)
+        .fetch_optional(executor)
+        .await?;
+
+    Ok(task)
+}
+
 #[forge::query]
 pub async fn list_tasks(ctx: &QueryContext) -> Result<Vec<Task>> {
     let user_id = ctx.user_id()?;
-    let tasks = sqlx::query_as::<_, Task>(
-        "SELECT id, user_id, title, description, status, time_spent_secs,
-                position, due_at, created_at, updated_at
-         FROM tasks
-         WHERE user_id = $1
-         ORDER BY position ASC, created_at ASC",
-    )
-    .bind(user_id)
-    .fetch_all(ctx.db())
-    .await?;
+    let query = format!(
+        "SELECT {TASK_COLUMNS} FROM tasks WHERE user_id = $1 ORDER BY position ASC, created_at ASC"
+    );
+
+    let tasks = sqlx::query_as::<_, Task>(&query)
+        .bind(user_id)
+        .fetch_all(ctx.db())
+        .await?;
 
     Ok(tasks)
 }
@@ -63,26 +83,15 @@ pub async fn list_tasks(ctx: &QueryContext) -> Result<Vec<Task>> {
 #[forge::query]
 pub async fn get_task(ctx: &QueryContext, input: GetTaskInput) -> Result<Task> {
     let user_id = ctx.user_id()?;
-    sqlx::query_as::<_, Task>(
-        "SELECT id, user_id, title, description, status, time_spent_secs,
-                position, due_at, created_at, updated_at
-         FROM tasks
-         WHERE id = $1 AND user_id = $2",
-    )
-    .bind(input.id)
-    .bind(user_id)
-    .fetch_optional(ctx.db())
-    .await?
-    .ok_or_else(|| ForgeError::NotFound("Task not found".into()))
+
+    find_task_for_user(ctx.db(), input.id, user_id)
+        .await?
+        .ok_or_else(|| ForgeError::NotFound("Task not found".into()))
 }
 
 #[forge::mutation]
 pub async fn create_task(ctx: &MutationContext, input: CreateTaskInput) -> Result<Task> {
-    let title = input.title.trim().to_string();
-    if title.is_empty() {
-        return Err(ForgeError::Validation("Title is required".into()));
-    }
-
+    let title = required_trimmed(&input.title, "Title is required")?;
     let user_id = ctx.user_id()?;
     let status = input.status.unwrap_or(TaskStatus::Inbox);
     let description = input.description.unwrap_or_default();
@@ -96,21 +105,19 @@ pub async fn create_task(ctx: &MutationContext, input: CreateTaskInput) -> Resul
             .fetch_one(&mut conn)
             .await?;
 
-    let position = max_pos.unwrap_or(0) + 10_000;
+    let position = next_position(max_pos);
+    let insert_task_query = format!(
+        "INSERT INTO tasks (user_id, title, description, status, position) VALUES ($1, $2, $3, $4, $5) RETURNING {TASK_COLUMNS}"
+    );
 
-    let task = sqlx::query_as::<_, Task>(
-        "INSERT INTO tasks (user_id, title, description, status, position)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, user_id, title, description, status, time_spent_secs,
-                   position, due_at, created_at, updated_at",
-    )
-    .bind(user_id)
-    .bind(&title)
-    .bind(&description)
-    .bind(status)
-    .bind(position)
-    .fetch_one(&mut conn)
-    .await?;
+    let task = sqlx::query_as::<_, Task>(&insert_task_query)
+        .bind(user_id)
+        .bind(&title)
+        .bind(&description)
+        .bind(status)
+        .bind(position)
+        .fetch_one(&mut conn)
+        .await?;
 
     Ok(task)
 }
@@ -120,40 +127,30 @@ pub async fn update_task(ctx: &MutationContext, input: UpdateTaskInput) -> Resul
     let user_id = ctx.user_id()?;
     let mut conn = ctx.conn().await?;
 
-    let existing = sqlx::query_as::<_, Task>(
-        "SELECT id, user_id, title, description, status, time_spent_secs,
-                position, due_at, created_at, updated_at
-         FROM tasks WHERE id = $1 AND user_id = $2",
-    )
-    .bind(input.id)
-    .bind(user_id)
-    .fetch_optional(&mut conn)
-    .await?
-    .ok_or_else(|| ForgeError::NotFound("Task not found".into()))?;
+    let existing = find_task_for_user(&mut *conn, input.id, user_id)
+        .await?
+        .ok_or_else(|| ForgeError::NotFound("Task not found".into()))?;
 
-    let title = input.title.unwrap_or(existing.title);
+    let title = match input.title {
+        Some(title) => required_trimmed(&title, "Title is required")?,
+        None => existing.title,
+    };
     let description = input.description.unwrap_or(existing.description);
     let status = input.status.unwrap_or(existing.status);
-    let due_at = match input.due_at {
-        Some(d) => d,
-        None => existing.due_at,
-    };
+    let due_at = input.due_at.unwrap_or(existing.due_at);
+    let update_task_query = format!(
+        "UPDATE tasks SET title = $1, description = $2, status = $3, due_at = $4, updated_at = NOW() WHERE id = $5 AND user_id = $6 RETURNING {TASK_COLUMNS}"
+    );
 
-    let task = sqlx::query_as::<_, Task>(
-        "UPDATE tasks SET title = $1, description = $2, status = $3, due_at = $4,
-                updated_at = NOW()
-         WHERE id = $5 AND user_id = $6
-         RETURNING id, user_id, title, description, status, time_spent_secs,
-                   position, due_at, created_at, updated_at",
-    )
-    .bind(&title)
-    .bind(&description)
-    .bind(status)
-    .bind(due_at)
-    .bind(input.id)
-    .bind(user_id)
-    .fetch_one(&mut conn)
-    .await?;
+    let task = sqlx::query_as::<_, Task>(&update_task_query)
+        .bind(&title)
+        .bind(&description)
+        .bind(status)
+        .bind(due_at)
+        .bind(input.id)
+        .bind(user_id)
+        .fetch_one(&mut conn)
+        .await?;
 
     Ok(task)
 }
@@ -184,14 +181,13 @@ pub async fn focus_task(ctx: &MutationContext, input: FocusTaskInput) -> Result<
     let mut conn = ctx.conn().await?;
 
     // Defocus the currently focused task (stays in focus area as in_progress)
-    let focused = sqlx::query_as::<_, Task>(
-        "SELECT id, user_id, title, description, status, time_spent_secs,
-                position, due_at, created_at, updated_at
-         FROM tasks WHERE user_id = $1 AND status = 'focused'",
-    )
-    .bind(user_id)
-    .fetch_optional(&mut conn)
-    .await?;
+    let focused_query =
+        format!("SELECT {TASK_COLUMNS} FROM tasks WHERE user_id = $1 AND status = 'focused'");
+
+    let focused = sqlx::query_as::<_, Task>(&focused_query)
+        .bind(user_id)
+        .fetch_optional(&mut conn)
+        .await?;
 
     if let Some(prev) = focused {
         if prev.id == input.id {
@@ -212,18 +208,17 @@ pub async fn focus_task(ctx: &MutationContext, input: FocusTaskInput) -> Result<
     }
 
     // Focus the new task
-    let task = sqlx::query_as::<_, Task>(
-        "UPDATE tasks SET status = 'focused', updated_at = $1
-         WHERE id = $2 AND user_id = $3
-         RETURNING id, user_id, title, description, status, time_spent_secs,
-                   position, due_at, created_at, updated_at",
-    )
-    .bind(now)
-    .bind(input.id)
-    .bind(user_id)
-    .fetch_optional(&mut conn)
-    .await?
-    .ok_or_else(|| ForgeError::NotFound("Task not found".into()))?;
+    let focus_task_query = format!(
+        "UPDATE tasks SET status = 'focused', updated_at = $1 WHERE id = $2 AND user_id = $3 RETURNING {TASK_COLUMNS}"
+    );
+
+    let task = sqlx::query_as::<_, Task>(&focus_task_query)
+        .bind(now)
+        .bind(input.id)
+        .bind(user_id)
+        .fetch_optional(&mut conn)
+        .await?
+        .ok_or_else(|| ForgeError::NotFound("Task not found".into()))?;
 
     Ok(task)
 }
@@ -239,16 +234,9 @@ pub async fn unfocus_task(ctx: &MutationContext, input: UnfocusTaskInput) -> Res
     let now = Utc::now();
     let mut conn = ctx.conn().await?;
 
-    let task = sqlx::query_as::<_, Task>(
-        "SELECT id, user_id, title, description, status, time_spent_secs,
-                position, due_at, created_at, updated_at
-         FROM tasks WHERE id = $1 AND user_id = $2",
-    )
-    .bind(input.id)
-    .bind(user_id)
-    .fetch_optional(&mut conn)
-    .await?
-    .ok_or_else(|| ForgeError::NotFound("Task not found".into()))?;
+    let task = find_task_for_user(&mut *conn, input.id, user_id)
+        .await?
+        .ok_or_else(|| ForgeError::NotFound("Task not found".into()))?;
 
     // Only accumulate timer if the task was actively focused
     let new_time = if task.status == TaskStatus::Focused {
@@ -258,17 +246,16 @@ pub async fn unfocus_task(ctx: &MutationContext, input: UnfocusTaskInput) -> Res
         task.time_spent_secs
     };
 
-    let result = sqlx::query_as::<_, Task>(
-        "UPDATE tasks SET status = 'in_progress', time_spent_secs = $1, updated_at = $2
-         WHERE id = $3
-         RETURNING id, user_id, title, description, status, time_spent_secs,
-                   position, due_at, created_at, updated_at",
-    )
-    .bind(new_time)
-    .bind(now)
-    .bind(input.id)
-    .fetch_one(&mut conn)
-    .await?;
+    let unfocus_task_query = format!(
+        "UPDATE tasks SET status = 'in_progress', time_spent_secs = $1, updated_at = $2 WHERE id = $3 RETURNING {TASK_COLUMNS}"
+    );
+
+    let result = sqlx::query_as::<_, Task>(&unfocus_task_query)
+        .bind(new_time)
+        .bind(now)
+        .bind(input.id)
+        .fetch_one(&mut conn)
+        .await?;
 
     Ok(result)
 }
@@ -278,19 +265,18 @@ pub async fn reorder_task(ctx: &MutationContext, input: ReorderTaskInput) -> Res
     let user_id = ctx.user_id()?;
     let mut conn = ctx.conn().await?;
 
-    let task = sqlx::query_as::<_, Task>(
-        "UPDATE tasks SET status = $1, position = $2, updated_at = NOW()
-         WHERE id = $3 AND user_id = $4
-         RETURNING id, user_id, title, description, status, time_spent_secs,
-                   position, due_at, created_at, updated_at",
-    )
-    .bind(input.status)
-    .bind(input.position)
-    .bind(input.id)
-    .bind(user_id)
-    .fetch_optional(&mut conn)
-    .await?
-    .ok_or_else(|| ForgeError::NotFound("Task not found".into()))?;
+    let reorder_task_query = format!(
+        "UPDATE tasks SET status = $1, position = $2, updated_at = NOW() WHERE id = $3 AND user_id = $4 RETURNING {TASK_COLUMNS}"
+    );
+
+    let task = sqlx::query_as::<_, Task>(&reorder_task_query)
+        .bind(input.status)
+        .bind(input.position)
+        .bind(input.id)
+        .bind(user_id)
+        .fetch_optional(&mut conn)
+        .await?
+        .ok_or_else(|| ForgeError::NotFound("Task not found".into()))?;
 
     Ok(task)
 }
@@ -298,39 +284,7 @@ pub async fn reorder_task(ctx: &MutationContext, input: ReorderTaskInput) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
-    use forge::testing::IsolatedTestDb;
-    use std::path::Path;
-
-    fn require_test_db() -> bool {
-        dotenvy::dotenv().ok();
-        std::env::var("TEST_DATABASE_URL").is_ok()
-    }
-
-    async fn setup_db() -> IsolatedTestDb {
-        IsolatedTestDb::setup(
-            "tasks_test",
-            &forge::get_internal_sql(),
-            Path::new("migrations"),
-        )
-        .await
-        .unwrap()
-    }
-
-    async fn insert_user(pool: &sqlx::PgPool) -> Uuid {
-        let hash = bcrypt::hash("password123", 4).unwrap();
-        let user = sqlx::query_as::<_, crate::schema::User>(
-            "INSERT INTO users (email, name, password_hash)
-             VALUES ($1, $2, $3)
-             RETURNING id, email, name, password_hash, created_at, updated_at",
-        )
-        .bind(format!("test-{}@example.com", Uuid::new_v4()))
-        .bind("Tester")
-        .bind(&hash)
-        .fetch_one(pool)
-        .await
-        .unwrap();
-        user.id
-    }
+    use crate::test_support::{insert_unique_test_user, require_test_db, setup_test_db};
 
     async fn insert_task(pool: &sqlx::PgPool, user_id: Uuid, title: &str) -> Task {
         sqlx::query_as::<_, Task>(
@@ -351,8 +305,8 @@ mod tests {
         if !require_test_db() {
             return;
         }
-        let db = setup_db().await;
-        let uid = insert_user(db.pool()).await;
+        let db = setup_test_db("tasks_test").await;
+        let uid = insert_unique_test_user(db.pool()).await;
         let task = insert_task(db.pool(), uid, "My task").await;
 
         assert_eq!(task.title, "My task");
@@ -368,9 +322,9 @@ mod tests {
         if !require_test_db() {
             return;
         }
-        let db = setup_db().await;
-        let uid_a = insert_user(db.pool()).await;
-        let uid_b = insert_user(db.pool()).await;
+        let db = setup_test_db("tasks_test").await;
+        let uid_a = insert_unique_test_user(db.pool()).await;
+        let uid_b = insert_unique_test_user(db.pool()).await;
 
         insert_task(db.pool(), uid_a, "A's task").await;
         insert_task(db.pool(), uid_b, "B's task").await;
@@ -396,8 +350,8 @@ mod tests {
         if !require_test_db() {
             return;
         }
-        let db = setup_db().await;
-        let uid = insert_user(db.pool()).await;
+        let db = setup_test_db("tasks_test").await;
+        let uid = insert_unique_test_user(db.pool()).await;
         let task = insert_task(db.pool(), uid, "Original").await;
 
         let updated = sqlx::query_as::<_, Task>(
@@ -425,8 +379,8 @@ mod tests {
         if !require_test_db() {
             return;
         }
-        let db = setup_db().await;
-        let uid = insert_user(db.pool()).await;
+        let db = setup_test_db("tasks_test").await;
+        let uid = insert_unique_test_user(db.pool()).await;
         let task = insert_task(db.pool(), uid, "To delete").await;
 
         sqlx::query("DELETE FROM tasks WHERE id = $1")
@@ -450,8 +404,8 @@ mod tests {
         if !require_test_db() {
             return;
         }
-        let db = setup_db().await;
-        let uid = insert_user(db.pool()).await;
+        let db = setup_test_db("tasks_test").await;
+        let uid = insert_unique_test_user(db.pool()).await;
 
         let t1 = insert_task(db.pool(), uid, "Task 1").await;
         let t2 = insert_task(db.pool(), uid, "Task 2").await;

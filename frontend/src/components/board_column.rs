@@ -3,6 +3,7 @@ use dioxus_sdk::storage::use_persistent;
 
 use crate::components::{DropTarget, TaskCard, TouchHoverZone};
 use crate::forge::{Task, TaskStatus};
+use crate::task_positions::{drop_status, insertion_position, trailing_position};
 use crate::time_utils;
 
 #[component]
@@ -43,18 +44,10 @@ pub fn BoardColumn(
 
     let count = tasks.len();
     let hidden_count = count - visible_tasks.len();
-    let end_position = tasks.last().map(|t| t.position + 10_000).unwrap_or(10_000);
+    let end_position = trailing_position(&tasks);
     let mut drag_over = use_signal(|| false);
 
-    let col_drop_status = match status {
-        TaskStatus::Inbox => "inbox",
-        TaskStatus::UpNext => "up_next",
-        TaskStatus::Paused => "paused",
-        TaskStatus::Done => "done",
-        TaskStatus::InProgress => "in_progress",
-        TaskStatus::Focused => "focused",
-        TaskStatus::Archived => "archived",
-    };
+    let col_drop_status = drop_status(&status);
 
     let touch_hover = try_consume_context::<TouchHoverZone>();
     let is_touch_hover_col =
@@ -115,31 +108,33 @@ pub fn BoardColumn(
                 div { class: "column-cards",
                     for (i, task) in visible_tasks.iter().enumerate() {
                         {
-                            let insert_pos = if i == 0 {
-                                task.position - 10_000
-                            } else {
-                                (visible_tasks[i - 1].position + task.position) / 2
-                            };
+                            let insert_pos = insertion_position(
+                                i.checked_sub(1)
+                                    .and_then(|previous| visible_tasks.get(previous))
+                                    .map(|previous| previous.position),
+                                task.position,
+                            );
                             rsx! {
-                                CardDropZone {
-                                    key: "dz-{i}",
-                                    status: status.clone(),
-                                    position: insert_pos,
-                                    visible: is_dragging,
-                                    on_drop,
-                                }
-                                TaskCard {
+                                Fragment {
                                     key: "{task.id}",
-                                    task: (*task).clone(),
-                                    selected: focused_row == Some(i),
-                                    dragging_id: dragging_id.clone(),
-                                    on_select,
-                                    on_delete,
-                                    on_drag_start: on_drag_start,
-                                    on_drag_end: on_drag_end,
-                                    on_touch_drag_start,
-                                    on_touch_drag_move,
-                                    on_touch_drag_end,
+                                    CardDropZone {
+                                        status: status.clone(),
+                                        position: insert_pos,
+                                        visible: is_dragging,
+                                        on_drop,
+                                    }
+                                    TaskCard {
+                                        task: (*task).clone(),
+                                        selected: focused_row == Some(i),
+                                        dragging_id: dragging_id.clone(),
+                                        on_select,
+                                        on_delete,
+                                        on_drag_start: on_drag_start,
+                                        on_drag_end: on_drag_end,
+                                        on_touch_drag_start,
+                                        on_touch_drag_move,
+                                        on_touch_drag_end,
+                                    }
                                 }
                             }
                         }
@@ -223,15 +218,7 @@ fn CardDropZone(
 ) -> Element {
     let mut active = use_signal(|| false);
 
-    let drop_status = match status {
-        TaskStatus::Inbox => "inbox",
-        TaskStatus::UpNext => "up_next",
-        TaskStatus::Paused => "paused",
-        TaskStatus::Done => "done",
-        TaskStatus::InProgress => "in_progress",
-        TaskStatus::Focused => "focused",
-        TaskStatus::Archived => "archived",
-    };
+    let drop_status = drop_status(&status);
 
     let touch_hover = try_consume_context::<TouchHoverZone>();
     let is_touch_active = touch_hover.is_some_and(|h| h.matches(drop_status, position));

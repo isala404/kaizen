@@ -3,14 +3,18 @@ use std::collections::HashMap;
 use dioxus::prelude::*;
 
 use crate::components::{
-    Board, DetailPanel, DropTarget, FieldManager, FocusDock, Header, QuickCapture,
-    TouchHoverZone, UndoAction, UndoToast,
+    Board, DetailPanel, DropTarget, FieldManager, FocusDock, Header, QuickCapture, TouchHoverZone,
+    UndoAction, UndoToast,
 };
 use crate::forge::{
     CreateTaskInput, DeleteTaskInput, FieldDefinition, FocusTaskInput, ReorderTaskInput, Task,
     TaskField, TaskStatus, UnfocusTaskInput, UpdateTaskInput, use_create_task, use_delete_task,
     use_focus_task, use_list_all_task_fields_live, use_list_field_definitions_live,
     use_list_tasks_live, use_reorder_task, use_unfocus_task, use_update_task,
+};
+use crate::task_positions::{
+    appended_position, apply_pending_moves, dock_target_status, dock_tasks as collect_dock_tasks,
+    parse_drop_status,
 };
 
 fn hit_test_drop_zone_js(x: f64, y: f64) -> String {
@@ -31,6 +35,46 @@ const COLUMN_STATUSES: [TaskStatus; 4] = [
     TaskStatus::Paused,
     TaskStatus::Done,
 ];
+const DOCK_STATUSES: [TaskStatus; 2] = [TaskStatus::Focused, TaskStatus::InProgress];
+
+type PendingMoves = HashMap<String, (TaskStatus, i32)>;
+
+fn find_task_title(tasks: &[Task], task_id: &str) -> String {
+    tasks
+        .iter()
+        .find(|task| task.id == task_id)
+        .map(|task| task.title.clone())
+        .unwrap_or_default()
+}
+
+fn is_task_focused(tasks: &[Task], task_id: &str) -> bool {
+    tasks
+        .iter()
+        .any(|task| task.id == task_id && task.status == TaskStatus::Focused)
+}
+
+fn selected_task(tasks: &[Task], selected_task_id: Option<&String>) -> Option<Task> {
+    selected_task_id.and_then(|task_id| tasks.iter().find(|task| task.id == *task_id).cloned())
+}
+
+fn tasks_for_column(tasks: &[Task], column_index: usize) -> Vec<Task> {
+    tasks
+        .iter()
+        .filter(|task| task.status == COLUMN_STATUSES[column_index])
+        .cloned()
+        .collect()
+}
+
+fn store_pending_move(
+    mut pending_moves: Signal<PendingMoves>,
+    task_id: String,
+    status: TaskStatus,
+    position: i32,
+) {
+    let mut next_moves = pending_moves.read().clone();
+    next_moves.insert(task_id, (status, position));
+    pending_moves.set(next_moves);
+}
 
 #[component]
 pub fn Dashboard() -> Element {
@@ -70,29 +114,17 @@ pub fn Dashboard() -> Element {
     // Pending moves: task_id → (new_status, new_position).
     // Applied on top of server data so optimistic updates survive
     // even when the server response hasn't arrived yet.
-    let mut pending_moves = use_signal(HashMap::<String, (TaskStatus, i32)>::new);
+    let pending_moves = use_signal(PendingMoves::new);
 
-    let tasks: Vec<Task> = {
-        let mut base = tasks_state.data.clone().unwrap_or_default();
-        let moves = pending_moves.read();
-        for t in &mut base {
-            if let Some((status, position)) = moves.get(&t.id) {
-                t.status = status.clone();
-                t.position = *position;
-            }
-        }
-        base
-    };
+    let tasks: Vec<Task> = apply_pending_moves(
+        tasks_state.data.clone().unwrap_or_default(),
+        &pending_moves.read(),
+    );
 
     let mut tasks_sig = use_signal(Vec::<Task>::new);
     *tasks_sig.write() = tasks.clone();
 
-    let mut dock_tasks: Vec<Task> = tasks
-        .iter()
-        .filter(|t| t.status == TaskStatus::Focused || t.status == TaskStatus::InProgress)
-        .cloned()
-        .collect();
-    dock_tasks.sort_by_key(|t| t.position);
+    let dock_tasks = collect_dock_tasks(&tasks);
 
     let _tick_val = tick();
 
@@ -112,11 +144,7 @@ pub fn Dashboard() -> Element {
         let delete = delete.clone();
         let tasks_for_delete = tasks.clone();
         move |id: String| {
-            let task_title = tasks_for_delete
-                .iter()
-                .find(|t| t.id == id)
-                .map(|t| t.title.clone())
-                .unwrap_or_default();
+            let task_title = find_task_title(&tasks_for_delete, &id);
 
             undo_action.set(Some(UndoAction {
                 label: format!("\"{}\" deleted", task_title),
@@ -222,97 +250,84 @@ pub fn Dashboard() -> Element {
     let process_touch_drop = {
         let reorder = reorder.clone();
         let unfocus = unfocus.clone();
-        Callback::new(move |(task_id, status_str, drop_position): (String, String, Option<i32>)| {
-            let is_focused = tasks_sig
-                .read()
-                .iter()
-                .any(|t| t.id == task_id && t.status == TaskStatus::Focused);
+        Callback::new(
+            move |(task_id, status_str, drop_position): (String, String, Option<i32>)| {
+                let is_focused = is_task_focused(&tasks_sig.read(), &task_id);
 
-            match status_str.as_str() {
-                "focus_dock" => {
-                    let max_pos = tasks_sig
-                        .read()
-                        .iter()
-                        .filter(|t| {
-                            t.status == TaskStatus::Focused || t.status == TaskStatus::InProgress
-                        })
-                        .map(|t| t.position)
-                        .max()
-                        .unwrap_or(0);
-                    let new_pos = max_pos + 10_000;
+                match status_str.as_str() {
+                    "focus_dock" => {
+                        let new_pos = appended_position(&tasks_sig.read(), &DOCK_STATUSES);
 
-                    {
-                        let mut map = pending_moves.read().clone();
-                        map.insert(task_id.clone(), (TaskStatus::InProgress, new_pos));
-                        pending_moves.set(map);
-                    }
-
-                    let reorder = reorder.clone();
-                    spawn(async move {
-                        let _ = reorder
-                            .call(ReorderTaskInput::new(task_id, TaskStatus::InProgress, new_pos))
-                            .await;
-                    });
-                }
-                "dock_reorder" => {
-                    if let Some(position) = drop_position {
-                        let status = tasks_sig
-                            .read()
-                            .iter()
-                            .find(|t| t.id == task_id)
-                            .map(|t| t.status.clone());
-                        let target_status = match status {
-                            Some(TaskStatus::Focused | TaskStatus::InProgress) => status.unwrap(),
-                            _ => TaskStatus::InProgress,
-                        };
-
-                        {
-                            let mut map = pending_moves.read().clone();
-                            map.insert(task_id.clone(), (target_status.clone(), position));
-                            pending_moves.set(map);
-                        }
+                        store_pending_move(
+                            pending_moves,
+                            task_id.clone(),
+                            TaskStatus::InProgress,
+                            new_pos,
+                        );
 
                         let reorder = reorder.clone();
                         spawn(async move {
                             let _ = reorder
-                                .call(ReorderTaskInput::new(task_id, target_status, position))
+                                .call(ReorderTaskInput::new(
+                                    task_id,
+                                    TaskStatus::InProgress,
+                                    new_pos,
+                                ))
                                 .await;
                         });
                     }
-                }
-                _ => {
-                    let target_status = match status_str.as_str() {
-                        "inbox" => Some(TaskStatus::Inbox),
-                        "up_next" => Some(TaskStatus::UpNext),
-                        "paused" => Some(TaskStatus::Paused),
-                        "done" => Some(TaskStatus::Done),
-                        "in_progress" => Some(TaskStatus::InProgress),
-                        "focused" => Some(TaskStatus::Focused),
-                        _ => None,
-                    };
+                    "dock_reorder" => {
+                        if let Some(position) = drop_position {
+                            let target_status = dock_target_status(
+                                tasks_sig
+                                    .read()
+                                    .iter()
+                                    .find(|task| task.id == task_id)
+                                    .map(|task| &task.status),
+                            );
 
-                    if let (Some(status), Some(position)) = (target_status, drop_position) {
-                        {
-                            let mut map = pending_moves.read().clone();
-                            map.insert(task_id.clone(), (status.clone(), position));
-                            pending_moves.set(map);
+                            store_pending_move(
+                                pending_moves,
+                                task_id.clone(),
+                                target_status.clone(),
+                                position,
+                            );
+
+                            let reorder = reorder.clone();
+                            spawn(async move {
+                                let _ = reorder
+                                    .call(ReorderTaskInput::new(task_id, target_status, position))
+                                    .await;
+                            });
                         }
+                    }
+                    _ => {
+                        let target_status = parse_drop_status(&status_str);
 
-                        let reorder = reorder.clone();
-                        let unfocus = unfocus.clone();
-                        spawn(async move {
-                            if is_focused {
-                                let _ =
-                                    unfocus.call(UnfocusTaskInput::new(task_id.clone())).await;
-                            }
-                            let _ = reorder
-                                .call(ReorderTaskInput::new(task_id, status, position))
-                                .await;
-                        });
+                        if let (Some(status), Some(position)) = (target_status, drop_position) {
+                            store_pending_move(
+                                pending_moves,
+                                task_id.clone(),
+                                status.clone(),
+                                position,
+                            );
+
+                            let reorder = reorder.clone();
+                            let unfocus = unfocus.clone();
+                            spawn(async move {
+                                if is_focused {
+                                    let _ =
+                                        unfocus.call(UnfocusTaskInput::new(task_id.clone())).await;
+                                }
+                                let _ = reorder
+                                    .call(ReorderTaskInput::new(task_id, status, position))
+                                    .await;
+                            });
+                        }
                     }
                 }
-            }
-        })
+            },
+        )
     };
 
     let on_touch_drag_end = move |(_x, _y): (f64, f64)| {
@@ -371,16 +386,14 @@ pub fn Dashboard() -> Element {
             let drag_id = dragging_id.read().clone();
             dragging_id.set(None);
             if let Some(task_id) = drag_id {
-                let is_focused = tasks_sig
-                    .read()
-                    .iter()
-                    .any(|t| t.id == task_id && t.status == TaskStatus::Focused);
+                let is_focused = is_task_focused(&tasks_sig.read(), &task_id);
 
-                {
-                    let mut map = pending_moves.read().clone();
-                    map.insert(task_id.clone(), (target.status.clone(), target.position));
-                    pending_moves.set(map);
-                }
+                store_pending_move(
+                    pending_moves,
+                    task_id.clone(),
+                    target.status.clone(),
+                    target.position,
+                );
 
                 let reorder = reorder.clone();
                 let unfocus = unfocus.clone();
@@ -407,22 +420,14 @@ pub fn Dashboard() -> Element {
             let drag_id = dragging_id.read().clone();
             dragging_id.set(None);
             if let Some(task_id) = drag_id {
-                let max_pos = tasks_sig
-                    .read()
-                    .iter()
-                    .filter(|t| {
-                        t.status == TaskStatus::Focused || t.status == TaskStatus::InProgress
-                    })
-                    .map(|t| t.position)
-                    .max()
-                    .unwrap_or(0);
-                let new_pos = max_pos + 10_000;
+                let new_pos = appended_position(&tasks_sig.read(), &DOCK_STATUSES);
 
-                {
-                    let mut map = pending_moves.read().clone();
-                    map.insert(task_id.clone(), (TaskStatus::InProgress, new_pos));
-                    pending_moves.set(map);
-                }
+                store_pending_move(
+                    pending_moves,
+                    task_id.clone(),
+                    TaskStatus::InProgress,
+                    new_pos,
+                );
 
                 let reorder = reorder.clone();
                 spawn(async move {
@@ -446,25 +451,28 @@ pub fn Dashboard() -> Element {
             dragging_id.set(None);
             if let Some(task_id) = drag_id {
                 let reorder = reorder.clone();
-                let status = tasks_sig
-                    .read()
-                    .iter()
-                    .find(|t| t.id == task_id)
-                    .map(|t| t.status.clone());
-                let target_status = match status {
-                    Some(TaskStatus::Focused | TaskStatus::InProgress) => status.unwrap(),
-                    _ => TaskStatus::InProgress,
-                };
+                let target_status = dock_target_status(
+                    tasks_sig
+                        .read()
+                        .iter()
+                        .find(|task| task.id == task_id)
+                        .map(|task| &task.status),
+                );
 
-                {
-                    let mut map = pending_moves.read().clone();
-                    map.insert(task_id.clone(), (target_status.clone(), position));
-                    pending_moves.set(map);
-                }
+                store_pending_move(
+                    pending_moves,
+                    task_id.clone(),
+                    target_status.clone(),
+                    position,
+                );
 
                 spawn(async move {
                     let _ = reorder
-                        .call(ReorderTaskInput::new(task_id.clone(), target_status, position))
+                        .call(ReorderTaskInput::new(
+                            task_id.clone(),
+                            target_status,
+                            position,
+                        ))
                         .await;
                     // Pending move is cleaned up during render when server data confirms it
                 });
@@ -480,10 +488,7 @@ pub fn Dashboard() -> Element {
         selected_task_id.set(None);
     };
 
-    let selected_task = {
-        let id = selected_task_id.read().clone();
-        id.and_then(|sid| tasks.iter().find(|t| t.id == sid).cloned())
-    };
+    let selected_task = selected_task(&tasks, selected_task_id.read().as_ref());
 
     let on_keydown = {
         let focus_mut = focus.clone();
@@ -504,14 +509,6 @@ pub fn Dashboard() -> Element {
                     }
                 }
             }
-
-            let get_col_tasks = |col: usize| -> Vec<Task> {
-                let all = tasks_sig.read();
-                all.iter()
-                    .filter(|t| t.status == COLUMN_STATUSES[col])
-                    .cloned()
-                    .collect()
-            };
 
             match e.key() {
                 Key::Escape => {
@@ -534,7 +531,7 @@ pub fn Dashboard() -> Element {
                 }
                 Key::Character(ref c) if c == "j" => {
                     if let Some(col) = *focused_col.read() {
-                        let count = get_col_tasks(col).len();
+                        let count = tasks_for_column(&tasks_sig.read(), col).len();
                         if count > 0 {
                             let row = focused_row.read().unwrap_or(0);
                             focused_row.set(Some((row + 1).min(count - 1)));
@@ -549,7 +546,7 @@ pub fn Dashboard() -> Element {
                 }
                 Key::Enter => {
                     if let (Some(col), Some(row)) = (*focused_col.read(), *focused_row.read()) {
-                        let col_tasks = get_col_tasks(col);
+                        let col_tasks = tasks_for_column(&tasks_sig.read(), col);
                         if let Some(task) = col_tasks.get(row) {
                             selected_task_id.set(Some(task.id.clone()));
                         }
@@ -558,7 +555,7 @@ pub fn Dashboard() -> Element {
                 Key::Character(ref c) if c == " " => {
                     e.prevent_default();
                     if let (Some(col), Some(row)) = (*focused_col.read(), *focused_row.read()) {
-                        let col_tasks = get_col_tasks(col);
+                        let col_tasks = tasks_for_column(&tasks_sig.read(), col);
                         if let Some(task) = col_tasks.get(row) {
                             let focus_mut = focus_mut.clone();
                             let id = task.id.clone();

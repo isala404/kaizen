@@ -1,7 +1,10 @@
 use forge::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::schema::{User, Viewer};
+use crate::{
+    schema::{USER_COLUMNS, User, Viewer},
+    support::required_trimmed,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterInput {
@@ -39,43 +42,74 @@ pub struct RefreshResponse {
     pub refresh_token: String,
 }
 
-#[forge::mutation(public)]
-pub async fn register(ctx: &MutationContext, input: RegisterInput) -> Result<AuthResponse> {
-    let name = input.name.trim().to_string();
-    let email = input.email.trim().to_lowercase();
-    let password = input.password.clone();
+fn normalize_email(email: &str) -> Result<String> {
+    Ok(required_trimmed(email, "Email is required")?.to_lowercase())
+}
 
-    if name.is_empty() {
-        return Err(ForgeError::Validation("Name is required".into()));
-    }
-    if email.is_empty() {
-        return Err(ForgeError::Validation("Email is required".into()));
-    }
+fn validate_password(password: &str) -> Result<()> {
     if password.len() < 8 {
         return Err(ForgeError::Validation(
             "Password must be at least 8 characters".into(),
         ));
     }
 
-    let hash = bcrypt::hash(&password, bcrypt::DEFAULT_COST)
+    Ok(())
+}
+
+async fn find_user_by_email<'a, E>(executor: E, email: &str) -> Result<Option<User>>
+where
+    E: sqlx::PgExecutor<'a>,
+{
+    let query = format!("SELECT {USER_COLUMNS} FROM users WHERE email = $1");
+
+    let user = sqlx::query_as::<_, User>(&query)
+        .bind(email)
+        .fetch_optional(executor)
+        .await?;
+
+    Ok(user)
+}
+
+async fn find_user_by_id<'a, E>(executor: E, user_id: uuid::Uuid) -> Result<Option<User>>
+where
+    E: sqlx::PgExecutor<'a>,
+{
+    let query = format!("SELECT {USER_COLUMNS} FROM users WHERE id = $1");
+
+    let user = sqlx::query_as::<_, User>(&query)
+        .bind(user_id)
+        .fetch_optional(executor)
+        .await?;
+
+    Ok(user)
+}
+
+#[forge::mutation(public)]
+pub async fn register(ctx: &MutationContext, input: RegisterInput) -> Result<AuthResponse> {
+    let name = required_trimmed(&input.name, "Name is required")?;
+    let email = normalize_email(&input.email)?;
+    validate_password(&input.password)?;
+
+    let hash = bcrypt::hash(&input.password, bcrypt::DEFAULT_COST)
         .map_err(|e| ForgeError::Internal(format!("Failed to hash password: {e}")))?;
 
     let mut conn = ctx.conn().await?;
-    let user = sqlx::query_as::<_, User>(
-        "INSERT INTO users (email, name, password_hash) VALUES ($1, $2, $3)
-         RETURNING id, email, name, password_hash, created_at, updated_at",
-    )
-    .bind(&email)
-    .bind(&name)
-    .bind(&hash)
-    .fetch_one(&mut conn)
-    .await
-    .map_err(|e| match e {
-        sqlx::Error::Database(ref db_err) if db_err.is_unique_violation() => {
-            ForgeError::Validation("An account with this email already exists".into())
-        }
-        other => ForgeError::Sql(other),
-    })?;
+    let insert_user_query = format!(
+        "INSERT INTO users (email, name, password_hash) VALUES ($1, $2, $3) RETURNING {USER_COLUMNS}"
+    );
+
+    let user = sqlx::query_as::<_, User>(&insert_user_query)
+        .bind(&email)
+        .bind(&name)
+        .bind(&hash)
+        .fetch_one(&mut conn)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::Database(ref db_err) if db_err.is_unique_violation() => {
+                ForgeError::Validation("An account with this email already exists".into())
+            }
+            other => ForgeError::Sql(other),
+        })?;
 
     let pair = ctx.issue_token_pair(user.id, &["user"]).await?;
     let viewer: Viewer = user.into();
@@ -89,17 +123,12 @@ pub async fn register(ctx: &MutationContext, input: RegisterInput) -> Result<Aut
 
 #[forge::mutation(public)]
 pub async fn login(ctx: &MutationContext, input: LoginInput) -> Result<AuthResponse> {
-    let email = input.email.trim().to_lowercase();
+    let email = normalize_email(&input.email)?;
 
     let mut conn = ctx.conn().await?;
-    let user = sqlx::query_as::<_, User>(
-        "SELECT id, email, name, password_hash, created_at, updated_at
-         FROM users WHERE email = $1",
-    )
-    .bind(&email)
-    .fetch_optional(&mut conn)
-    .await?
-    .ok_or_else(|| ForgeError::Unauthorized("Invalid email or password".into()))?;
+    let user = find_user_by_email(&mut *conn, &email)
+        .await?
+        .ok_or_else(|| ForgeError::Unauthorized("Invalid email or password".into()))?;
 
     let valid = bcrypt::verify(&input.password, &user.password_hash)
         .map_err(|e| ForgeError::Internal(format!("Failed to verify password: {e}")))?;
@@ -135,14 +164,9 @@ pub async fn logout(ctx: &MutationContext, input: LogoutInput) -> Result<()> {
 #[forge::query(unscoped)]
 pub async fn get_me(ctx: &QueryContext) -> Result<Viewer> {
     let user_id = ctx.user_id()?;
-    let user = sqlx::query_as::<_, User>(
-        "SELECT id, email, name, password_hash, created_at, updated_at
-         FROM users WHERE id = $1",
-    )
-    .bind(user_id)
-    .fetch_optional(ctx.db())
-    .await?
-    .ok_or_else(|| ForgeError::NotFound("User not found".into()))?;
+    let user = find_user_by_id(ctx.db(), user_id)
+        .await?
+        .ok_or_else(|| ForgeError::NotFound("User not found".into()))?;
 
     Ok(user.into())
 }
@@ -150,38 +174,7 @@ pub async fn get_me(ctx: &QueryContext) -> Result<Viewer> {
 #[cfg(test)]
 mod tests {
     use crate::schema::User;
-    use forge::testing::IsolatedTestDb;
-    use std::path::Path;
-
-    fn require_test_db() -> bool {
-        dotenvy::dotenv().ok();
-        std::env::var("TEST_DATABASE_URL").is_ok()
-    }
-
-    async fn setup_db() -> IsolatedTestDb {
-        IsolatedTestDb::setup(
-            "auth_test",
-            &forge::get_internal_sql(),
-            Path::new("migrations"),
-        )
-        .await
-        .unwrap()
-    }
-
-    async fn insert_user(pool: &sqlx::PgPool, email: &str, password: &str) -> User {
-        let hash = bcrypt::hash(password, 4).unwrap(); // cost=4 for fast tests
-        sqlx::query_as::<_, User>(
-            "INSERT INTO users (email, name, password_hash)
-             VALUES ($1, $2, $3)
-             RETURNING id, email, name, password_hash, created_at, updated_at",
-        )
-        .bind(email)
-        .bind("Test User")
-        .bind(&hash)
-        .fetch_one(pool)
-        .await
-        .unwrap()
-    }
+    use crate::test_support::{insert_test_user, require_test_db, setup_test_db};
 
     #[tokio::test]
     async fn bcrypt_hash_and_verify() {
@@ -195,8 +188,8 @@ mod tests {
         if !require_test_db() {
             return;
         }
-        let db = setup_db().await;
-        let user = insert_user(db.pool(), "test@example.com", "password123").await;
+        let db = setup_test_db("auth_test").await;
+        let user = insert_test_user(db.pool(), "test@example.com", "password123").await;
 
         assert_eq!(user.email, "test@example.com");
         assert_eq!(user.name, "Test User");
@@ -210,8 +203,8 @@ mod tests {
         if !require_test_db() {
             return;
         }
-        let db = setup_db().await;
-        insert_user(db.pool(), "dupe@example.com", "password123").await;
+        let db = setup_test_db("auth_test").await;
+        insert_test_user(db.pool(), "dupe@example.com", "password123").await;
 
         let result =
             sqlx::query("INSERT INTO users (email, name, password_hash) VALUES ($1, $2, $3)")
@@ -230,8 +223,8 @@ mod tests {
         if !require_test_db() {
             return;
         }
-        let db = setup_db().await;
-        insert_user(db.pool(), "find@example.com", "password123").await;
+        let db = setup_test_db("auth_test").await;
+        insert_test_user(db.pool(), "find@example.com", "password123").await;
 
         let found = sqlx::query_as::<_, User>(
             "SELECT id, email, name, password_hash, created_at, updated_at

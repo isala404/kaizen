@@ -105,9 +105,7 @@ test.describe("Drag and Drop", () => {
   });
 
   test("drag single task from Inbox to Up next", async ({ page }) => {
-    await createTasksViaApi(authToken, [
-      { title: "Move me", status: "inbox" },
-    ]);
+    await createTasksViaApi(authToken, [{ title: "Move me", status: "inbox" }]);
     await loginAndWait(page, email, "password123");
 
     await expect(cards(page, COL.inbox)).toHaveCount(1, { timeout: 10_000 });
@@ -207,11 +205,7 @@ test.describe("Drag and Drop", () => {
 
     await expect(cards(page, COL.inbox)).toHaveCount(3, { timeout: 10_000 });
 
-    await dragCard(
-      page,
-      cardByTitle(page, "Gamma"),
-      column(page, COL.paused),
-    );
+    await dragCard(page, cardByTitle(page, "Gamma"), column(page, COL.paused));
 
     await expect(
       column(page, COL.paused).locator(".task-card-title", {
@@ -285,11 +279,9 @@ test.describe("Drag and Drop", () => {
       srcBox.y + srcBox.height / 2,
     );
     await page.mouse.down();
-    await page.mouse.move(
-      srcBox.x + srcBox.width / 2 + 20,
-      srcBox.y + 20,
-      { steps: 5 },
-    );
+    await page.mouse.move(srcBox.x + srcBox.width / 2 + 20, srcBox.y + 20, {
+      steps: 5,
+    });
     await page.waitForTimeout(300);
 
     await expect(card).toHaveClass(/task-card-dragging/);
@@ -301,9 +293,7 @@ test.describe("Drag and Drop", () => {
     await page.mouse.up();
   });
 
-  test("drop zones in other columns activate during drag", async ({
-    page,
-  }) => {
+  test("drop zones in other columns activate during drag", async ({ page }) => {
     await createTasksViaApi(authToken, [
       { title: "Cross col", status: "inbox" },
       { title: "Target col task", status: "up_next" },
@@ -321,11 +311,9 @@ test.describe("Drag and Drop", () => {
       srcBox.y + srcBox.height / 2,
     );
     await page.mouse.down();
-    await page.mouse.move(
-      srcBox.x + srcBox.width / 2 + 10,
-      srcBox.y + 10,
-      { steps: 3 },
-    );
+    await page.mouse.move(srcBox.x + srcBox.width / 2 + 10, srcBox.y + 10, {
+      steps: 3,
+    });
     await page.waitForTimeout(200);
 
     const upNextZones = column(page, COL.upNext).locator(".drop-zone");

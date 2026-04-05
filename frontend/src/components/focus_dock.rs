@@ -2,7 +2,9 @@ use dioxus::prelude::*;
 
 use crate::components::TouchHoverZone;
 use crate::forge::{Task, TaskStatus};
+use crate::task_positions::{insertion_position, trailing_position};
 use crate::time_utils;
+use crate::touch_drag::use_touch_drag;
 
 #[component]
 pub fn FocusDock(
@@ -21,10 +23,7 @@ pub fn FocusDock(
 ) -> Element {
     let mut drag_over = use_signal(|| false);
     let mut last_tap_time = use_signal(|| 0.0f64);
-    let mut long_press_task = use_signal(|| Option::<dioxus::core::Task>::None);
-    let mut touch_active = use_signal(|| false);
-    let mut touch_start_pos = use_signal(|| (0.0f64, 0.0f64));
-    let mut last_touch_pos = use_signal(|| (0.0f64, 0.0f64));
+    let touch_drag = use_touch_drag();
     let dragging = is_drag_active.unwrap_or(false);
     let count = tasks.len();
 
@@ -87,11 +86,12 @@ pub fn FocusDock(
                     } else {
                         "focus-card"
                     };
-                    let insert_pos = if i == 0 {
-                        task.position - 10_000
-                    } else {
-                        (tasks[i - 1].position + task.position) / 2
-                    };
+                    let insert_pos = insertion_position(
+                        i.checked_sub(1)
+                            .and_then(|previous| tasks.get(previous))
+                            .map(|previous| previous.position),
+                        task.position,
+                    );
 
                     rsx! {
                         if let Some(ref reorder_handler) = on_reorder {
@@ -131,65 +131,15 @@ pub fn FocusDock(
                             ontouchstart: {
                                 let id = task.id.clone();
                                 let handler = on_touch_drag_start.clone();
-                                move |e| {
-                                    if let Some(ref h) = handler {
-                                        if let Some(touch) = e.touches().first() {
-                                            let coords = touch.client_coordinates();
-                                            touch_start_pos.set((coords.x, coords.y));
-                                            last_touch_pos.set((coords.x, coords.y));
-                                            let id = id.clone();
-                                            let h = h.clone();
-                                            let task = spawn(async move {
-                                                dioxus_sdk::time::sleep(std::time::Duration::from_millis(300)).await;
-                                                touch_active.set(true);
-                                                h.call((id, coords.x, coords.y));
-                                            });
-                                            long_press_task.set(Some(task));
-                                        }
-                                    }
-                                }
+                                move |e| touch_drag.handle_touch_start(e, id.clone(), handler.clone())
                             },
                             ontouchmove: {
                                 let move_handler = on_touch_drag_move.clone();
-                                move |e| {
-                                    if let Some(touch) = e.touches().first() {
-                                        let coords = touch.client_coordinates();
-                                        last_touch_pos.set((coords.x, coords.y));
-                                        if long_press_task.read().is_some() {
-                                            let (sx, sy) = *touch_start_pos.read();
-                                            let dx = coords.x - sx;
-                                            let dy = coords.y - sy;
-                                            if (dx * dx + dy * dy) > 100.0 {
-                                                if let Some(task) = long_press_task.take() {
-                                                    task.cancel();
-                                                }
-                                            }
-                                            return;
-                                        }
-                                        if *touch_active.read() {
-                                            e.prevent_default();
-                                            if let Some(ref h) = move_handler {
-                                                h.call((coords.x, coords.y));
-                                            }
-                                        }
-                                    }
-                                }
+                                move |e| touch_drag.handle_touch_move(e, move_handler.clone())
                             },
                             ontouchend: {
                                 let end_handler = on_touch_drag_end.clone();
-                                move |_| {
-                                    if let Some(task) = long_press_task.take() {
-                                        task.cancel();
-                                        return;
-                                    }
-                                    if *touch_active.read() {
-                                        touch_active.set(false);
-                                        if let Some(ref h) = end_handler {
-                                            let pos = *last_touch_pos.read();
-                                            h.call(pos);
-                                        }
-                                    }
-                                }
+                                move |_| touch_drag.handle_touch_end(end_handler.clone())
                             },
                             onclick: {
                                 let id = task.id.clone();
@@ -228,7 +178,7 @@ pub fn FocusDock(
             }
             if let Some(ref reorder_handler) = on_reorder {
                 DockDropZone {
-                    position: tasks.last().map(|t| t.position + 10_000).unwrap_or(10_000),
+                    position: trailing_position(&tasks),
                     visible: dragging,
                     on_drop: reorder_handler.clone(),
                 }
