@@ -1,14 +1,11 @@
 use dioxus::prelude::*;
 
-use crate::components::focus_dock::task_field_pills;
-use crate::forge::{FieldDefinition, Task, TaskField, TaskStatus};
+use crate::forge::{Task, TaskStatus};
 use crate::time_utils;
 
 #[component]
 pub fn TaskCard(
     task: Task,
-    field_defs: Option<Vec<FieldDefinition>>,
-    task_fields: Option<Vec<TaskField>>,
     selected: Option<bool>,
     dragging_id: Option<String>,
     on_select: EventHandler<String>,
@@ -34,24 +31,26 @@ pub fn TaskCard(
 
     let subtitle = match task.status {
         TaskStatus::Inbox => {
-            Some(format!("Added {}", time_utils::relative_time(&task.created_at)))
+            format!("Added {}", time_utils::relative_time(&task.updated_at))
+        }
+        TaskStatus::UpNext => {
+            format!("Queued {}", time_utils::relative_time(&task.updated_at))
         }
         TaskStatus::Paused => {
-            if !task.description.is_empty() {
-                Some(task.description.clone())
+            format!("Paused {}", time_utils::relative_time(&task.updated_at))
+        }
+        TaskStatus::Done => {
+            let when = time_utils::relative_time(&task.updated_at);
+            let duration = time_utils::format_duration(task.time_spent_secs);
+            if duration.is_empty() {
+                format!("Done {when}")
             } else {
-                Some(format!(
-                    "Paused {}",
-                    time_utils::relative_time(&task.updated_at)
-                ))
+                format!("Done {when} in {duration}")
             }
         }
-        _ => None,
-    };
-
-    let pills = match (field_defs.as_ref(), task_fields.as_ref()) {
-        (Some(fds), Some(tfs)) => task_field_pills(&task.id, fds, tfs),
-        _ => Vec::new(),
+        _ => {
+            time_utils::relative_time(&task.updated_at)
+        }
     };
 
     rsx! {
@@ -62,9 +61,13 @@ pub fn TaskCard(
                 let id = task.id.clone();
                 let handler = on_drag_start.clone();
                 move |e: Event<DragData>| {
-                    let dt = e.data().data_transfer();
-                    let _ = dt.set_data("text/plain", &id);
-                    dt.set_effect_allowed("move");
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        let dt = e.data().data_transfer();
+                        let _ = dt.set_data("text/plain", &id);
+                        dt.set_effect_allowed("move");
+                    }
+                    let _ = &e;
                     if let Some(ref h) = handler {
                         h.call(id.clone());
                     }
@@ -83,21 +86,7 @@ pub fn TaskCard(
                 move |_| on_select.call(id.clone())
             },
             h4 { class: "task-card-title", "{task.title}" }
-            if let Some(ref sub) = subtitle {
-                p { class: "task-card-subtitle", "{sub}" }
-            }
-            if !pills.is_empty() {
-                div { class: "task-card-fields",
-                    for (key, value, color) in &pills {
-                        span {
-                            class: "task-card-pill",
-                            style: "--tag-color: {color}",
-                            title: "{key}",
-                            "{value}"
-                        }
-                    }
-                }
-            }
+            p { class: "task-card-subtitle", "{subtitle}" }
             div { class: "task-actions",
                 button {
                     class: "task-action-btn task-action-delete",

@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 
 use dioxus::prelude::*;
-use js_sys::Function;
+use dioxus_sdk::storage::use_persistent;
 use pulldown_cmark::{Options, Parser, html};
-use wasm_bindgen::JsCast;
-use wasm_bindgen::JsValue;
 
 use crate::forge::{
     FieldDefinition, FieldValueType, SetTaskFieldInput, Task, TaskField, TaskStatus,
@@ -13,19 +11,27 @@ use crate::forge::{
 use crate::time_utils;
 
 fn highlight_code_blocks() {
-    spawn(async {
-        // hljs loads async from CDN, give it a moment
-        gloo_timers::future::TimeoutFuture::new(50).await;
-        if let Some(window) = web_sys::window() {
-            if let Ok(hljs) = js_sys::Reflect::get(&window, &JsValue::from_str("hljs")) {
-                if let Ok(func) = js_sys::Reflect::get(&hljs, &JsValue::from_str("highlightAll")) {
-                    if let Ok(f) = func.dyn_into::<Function>() {
-                        let _ = f.call0(&hljs);
+    #[cfg(target_arch = "wasm32")]
+    {
+        use js_sys::Function;
+        use wasm_bindgen::JsCast;
+        use wasm_bindgen::JsValue;
+
+        spawn(async {
+            dioxus_sdk::time::sleep(std::time::Duration::from_millis(50)).await;
+            if let Some(window) = web_sys::window() {
+                if let Ok(hljs) = js_sys::Reflect::get(&window, &JsValue::from_str("hljs")) {
+                    if let Ok(func) =
+                        js_sys::Reflect::get(&hljs, &JsValue::from_str("highlightAll"))
+                    {
+                        if let Ok(f) = func.dyn_into::<Function>() {
+                            let _ = f.call0(&hljs);
+                        }
                     }
                 }
             }
-        }
-    });
+        });
+    }
 }
 
 fn render_markdown(input: &str) -> String {
@@ -53,12 +59,7 @@ pub fn DetailPanel(
     let mut desc_draft = use_signal(|| task.description.clone());
     let mut title_draft = use_signal(|| task.title.clone());
     let mut field_drafts = use_signal(HashMap::<String, String>::new);
-    let mut fullscreen = use_signal(|| {
-        web_sys::window()
-            .and_then(|w| w.local_storage().ok().flatten())
-            .and_then(|s| s.get_item("detail_fullscreen").ok().flatten())
-            .is_some_and(|v| v == "true")
-    });
+    let mut fullscreen = use_persistent("detail_fullscreen", || false);
 
     let desc_for_effect = task.description.clone();
     let is_editing = *editing_desc.read();
@@ -122,11 +123,6 @@ pub fn DetailPanel(
                         onclick: move |_| {
                             let next = !*fullscreen.read();
                             fullscreen.set(next);
-                            if let Some(storage) = web_sys::window()
-                                .and_then(|w| w.local_storage().ok().flatten())
-                            {
-                                let _ = storage.set_item("detail_fullscreen", if next { "true" } else { "false" });
-                            }
                         },
                         if *fullscreen.read() { "⊟" } else { "⊞" }
                     }

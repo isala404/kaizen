@@ -13,6 +13,14 @@ UI rebuild: horizontal focus dock, simplified board cards, removed DnD/filters/p
 - Adding tasks: inline "+" in each column creates task with that column's status
 - Dead files left on disk: field_filter_bar.rs, field_pills.rs (unreachable, not compiled)
 
+Cross-platform + single layout
+- Merged desktop-layout and mobile-layout into single responsive layout (board everywhere)
+- Removed StatusTabs, TaskList, SwipeableCard components (mod declarations removed, files on disk)
+- Moved js-sys/web-sys/gloo-timers/wasm-bindgen to target-specific deps, gated code with #[cfg(target_arch = "wasm32")]
+- Replaced js_sys::Date with chrono, js_sys::Math::random with rand, localStorage with storage.rs helper
+- Adopted dioxus-sdk 0.7 for cross-platform sleep/timers and persistent storage (file-backed on native, localStorage on web)
+- highlight.js syntax highlighting skipped on native (markdown still renders via pulldown-cmark)
+
 Key decisions:
 - #[forge::model] strips derives, use plain #[derive(sqlx::FromRow, Serialize, Deserialize)]
 - TestMutationContext can't call handlers, unit tests hit DB directly

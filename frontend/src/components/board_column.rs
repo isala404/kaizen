@@ -1,7 +1,8 @@
 use dioxus::prelude::*;
+use dioxus_sdk::storage::use_persistent;
 
 use crate::components::{DropTarget, TaskCard};
-use crate::forge::{FieldDefinition, Task, TaskField, TaskStatus};
+use crate::forge::{Task, TaskStatus};
 use crate::time_utils;
 
 #[component]
@@ -11,8 +12,6 @@ pub fn BoardColumn(
     is_focused: bool,
     focused_row: Option<usize>,
     tasks: Vec<Task>,
-    field_defs: Vec<FieldDefinition>,
-    task_fields: Vec<TaskField>,
     dragging_id: Option<String>,
     on_select: EventHandler<String>,
     on_delete: EventHandler<String>,
@@ -21,16 +20,7 @@ pub fn BoardColumn(
     on_drag_end: EventHandler<()>,
     on_drop: EventHandler<DropTarget>,
 ) -> Element {
-    let mut collapsed = use_signal(|| {
-        if let Some(window) = web_sys::window() {
-            if let Ok(Some(storage)) = window.local_storage() {
-                if let Ok(Some(val)) = storage.get_item(&format!("col_collapsed_{label}")) {
-                    return val == "true";
-                }
-            }
-        }
-        false
-    });
+    let mut collapsed = use_persistent(format!("col_collapsed_{label}"), || false);
     let mut show_add = use_signal(|| false);
     let mut add_title = use_signal(String::new);
     let mut show_previous = use_signal(|| false);
@@ -93,18 +83,9 @@ pub fn BoardColumn(
             div {
                 class: "column-header",
                 onclick: {
-                    let label = label.clone();
                     move |_| {
                         let new_val = !*collapsed.read();
                         collapsed.set(new_val);
-                        if let Some(window) = web_sys::window() {
-                            if let Ok(Some(storage)) = window.local_storage() {
-                                let _ = storage.set_item(
-                                    &format!("col_collapsed_{label}"),
-                                    if new_val { "true" } else { "false" },
-                                );
-                            }
-                        }
                     }
                 },
                 h3 { class: "column-title", "{header_label}" }
@@ -131,8 +112,6 @@ pub fn BoardColumn(
                                 TaskCard {
                                     key: "{task.id}",
                                     task: (*task).clone(),
-                                    field_defs: field_defs.clone(),
-                                    task_fields: task_fields.clone(),
                                     selected: focused_row == Some(i),
                                     dragging_id: dragging_id.clone(),
                                     on_select,

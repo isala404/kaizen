@@ -1,17 +1,18 @@
 use dioxus::prelude::*;
 
 use crate::forge::{
-    CreateFieldDefinitionInput, DeleteFieldDefinitionInput, FieldDefinition, FieldValueType,
+    CreateFieldDefinitionInput, DeleteFieldDefinitionInput, FieldValueType,
     use_create_field_definition, use_delete_field_definition, use_list_field_definitions_live,
 };
 
 fn random_color() -> String {
+    use rand::Rng;
     const PALETTE: &[&str] = &[
         "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899",
         "#f43f5e", "#ef4444", "#f97316", "#eab308", "#84cc16",
         "#22c55e", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6",
     ];
-    let idx = (js_sys::Math::random() * PALETTE.len() as f64) as usize % PALETTE.len();
+    let idx = rand::rng().random_range(0..PALETTE.len());
     PALETTE[idx].to_string()
 }
 

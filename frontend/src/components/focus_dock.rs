@@ -1,13 +1,11 @@
 use dioxus::prelude::*;
 
-use crate::forge::{FieldDefinition, Task, TaskField, TaskStatus};
+use crate::forge::{Task, TaskStatus};
 use crate::time_utils;
 
 #[component]
 pub fn FocusDock(
     tasks: Vec<Task>,
-    field_defs: Vec<FieldDefinition>,
-    task_fields: Vec<TaskField>,
     is_drag_active: Option<bool>,
     on_focus: EventHandler<String>,
     on_unfocus: EventHandler<String>,
@@ -76,8 +74,6 @@ pub fn FocusDock(
                     } else {
                         "focus-card"
                     };
-                    let pills = task_field_pills(&task.id, &field_defs, &task_fields);
-
                     let insert_pos = if i == 0 {
                         task.position - 10_000
                     } else {
@@ -99,9 +95,13 @@ pub fn FocusDock(
                                 let id = task.id.clone();
                                 let handler = on_drag_start.clone();
                                 move |e: Event<DragData>| {
-                                    let dt = e.data().data_transfer();
-                                    let _ = dt.set_data("text/plain", &id);
-                                    dt.set_effect_allowed("move");
+                                    #[cfg(target_arch = "wasm32")]
+                                    {
+                                        let dt = e.data().data_transfer();
+                                        let _ = dt.set_data("text/plain", &id);
+                                        dt.set_effect_allowed("move");
+                                    }
+                                    let _ = &e;
                                     if let Some(ref h) = handler {
                                         h.call(id.clone());
                                     }
@@ -139,26 +139,11 @@ pub fn FocusDock(
                                 span { class: "focused-badge", "Focused" }
                             }
                             h3 { class: "focus-card-title", "{task.title}" }
-                            if !task.description.is_empty() {
-                                div { class: "focus-card-desc", "{task.description}" }
-                            }
-                            if !pills.is_empty() {
-                                div { class: "focus-card-fields",
-                                    for (key, value, color) in &pills {
-                                        span {
-                                            class: "focus-card-tag",
-                                            style: "--tag-color: {color}",
-                                            title: "{key}",
-                                            "{value}"
-                                        }
-                                    }
-                                }
-                            }
                             div { class: "focus-card-meta",
                                 if !time_str.is_empty() {
                                     span {
                                         class: if is_focused { "focus-card-time focus-card-time-active" } else { "focus-card-time" },
-                                        "{time_str}"
+                                        "Worked {time_str}"
                                     }
                                 }
                             }
@@ -209,25 +194,4 @@ fn DockDropZone(position: i32, visible: bool, on_drop: EventHandler<i32>) -> Ele
             },
         }
     }
-}
-
-pub fn task_field_pills(
-    task_id: &str,
-    field_defs: &[FieldDefinition],
-    task_fields: &[TaskField],
-) -> Vec<(String, String, String)> {
-    let mut pills = Vec::new();
-    for fd in field_defs {
-        if let Some(tf) = task_fields
-            .iter()
-            .find(|tf| tf.task_id == task_id && tf.field_id == fd.id && !tf.value.is_empty())
-        {
-            let color = fd
-                .color
-                .clone()
-                .unwrap_or_else(|| "#6366f1".to_string());
-            pills.push((fd.key.clone(), tf.value.clone(), color));
-        }
-    }
-    pills
 }

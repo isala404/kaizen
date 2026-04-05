@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use dioxus::prelude::*;
 
 use crate::components::{
-    Board, DetailPanel, DropTarget, FieldManager, FocusDock, Header, QuickCapture, StatusChange,
-    StatusTabs, TaskList, UndoAction, UndoToast,
+    Board, DetailPanel, DropTarget, FieldManager, FocusDock, Header, QuickCapture,
+    UndoAction, UndoToast,
 };
 use crate::forge::{
     CreateTaskInput, DeleteTaskInput, FieldDefinition, FocusTaskInput, ReorderTaskInput, Task,
@@ -12,7 +12,6 @@ use crate::forge::{
     use_focus_task, use_list_all_task_fields_live, use_list_field_definitions_live,
     use_list_tasks_live, use_reorder_task, use_unfocus_task, use_update_task,
 };
-use crate::time_utils;
 
 const COLUMN_STATUSES: [TaskStatus; 4] = [
     TaskStatus::Inbox,
@@ -36,17 +35,13 @@ pub fn Dashboard() -> Element {
     let mut show_capture = use_signal(|| false);
     let mut dragging_id = use_signal(|| Option::<String>::None);
     let mut undo_action = use_signal(|| Option::<UndoAction>::None);
-    let mut active_tab = use_signal(|| TaskStatus::Inbox);
     let mut focused_col = use_signal(|| Option::<usize>::None);
     let mut focused_row = use_signal(|| Option::<usize>::None);
 
     // Live timer tick
     let mut tick = use_signal(|| 0u64);
-    use_future(move || async move {
-        loop {
-            gloo_timers::future::TimeoutFuture::new(1_000).await;
-            tick.set(tick() + 1);
-        }
+    dioxus_sdk::time::use_interval(std::time::Duration::from_secs(1), move |()| {
+        tick.set(tick() + 1);
     });
 
     let field_defs_state = use_list_field_definitions_live();
@@ -114,7 +109,7 @@ pub fn Dashboard() -> Element {
 
             let delete = delete.clone();
             spawn(async move {
-                gloo_timers::future::TimeoutFuture::new(5_000).await;
+                dioxus_sdk::time::sleep(std::time::Duration::from_secs(5)).await;
                 let current = undo_action.read().clone();
                 if current.as_ref().is_some_and(|a| a.task_id == id) {
                     undo_action.set(None);
@@ -140,18 +135,6 @@ pub fn Dashboard() -> Element {
             let unfocus = unfocus.clone();
             spawn(async move {
                 let _ = unfocus.call(UnfocusTaskInput::new(id)).await;
-            });
-        }
-    };
-
-    let on_status_change = {
-        let update = update.clone();
-        move |sc: StatusChange| {
-            let update = update.clone();
-            spawn(async move {
-                let _ = update
-                    .call(UpdateTaskInput::new(sc.id).status(sc.status))
-                    .await;
             });
         }
     };
@@ -298,17 +281,20 @@ pub fn Dashboard() -> Element {
     let on_keydown = {
         let focus_mut = focus.clone();
         move |e: Event<KeyboardData>| {
-            if let Some(window) = web_sys::window()
-                && let Some(doc) = window.document()
-                && let Some(el) = doc.active_element()
+            #[cfg(target_arch = "wasm32")]
             {
-                let tag = el.tag_name().to_lowercase();
-                if tag == "input" || tag == "textarea" {
-                    if e.key() == Key::Escape {
-                        show_capture.set(false);
-                        selected_task_id.set(None);
+                if let Some(window) = web_sys::window()
+                    && let Some(doc) = window.document()
+                    && let Some(el) = doc.active_element()
+                {
+                    let tag = el.tag_name().to_lowercase();
+                    if tag == "input" || tag == "textarea" {
+                        if e.key() == Key::Escape {
+                            show_capture.set(false);
+                            selected_task_id.set(None);
+                        }
+                        return;
                     }
-                    return;
                 }
             }
 
@@ -403,93 +389,35 @@ pub fn Dashboard() -> Element {
                 }
             }
 
-            div { class: "desktop-layout",
-                FocusDock {
-                    tasks: dock_tasks.clone(),
-                    field_defs: field_defs.clone(),
-                    task_fields: all_task_fields.clone(),
-                    is_drag_active: dragging_id.read().is_some(),
-                    on_focus: on_focus.clone(),
-                    on_unfocus: on_unfocus.clone(),
-                    on_drop_focus: on_drop_focus.clone(),
-                    on_reorder: on_dock_reorder.clone(),
-                    on_drag_start,
-                    on_drag_end,
-                    on_select,
-                }
-
-                Board {
-                    tasks: tasks.clone(),
-                    field_defs: field_defs.clone(),
-                    task_fields: all_task_fields.clone(),
-                    focused_col: *focused_col.read(),
-                    focused_row: *focused_row.read(),
-                    dragging_id: dragging_id.read().clone(),
-                    on_select,
-                    on_delete: on_delete.clone(),
-                    on_create: on_create.clone(),
-                    on_drag_start,
-                    on_drag_end,
-                    on_drop,
-                }
-
-                div { class: "scroll-indicator", "↓" }
+            FocusDock {
+                tasks: dock_tasks.clone(),
+                is_drag_active: dragging_id.read().is_some(),
+                on_focus: on_focus.clone(),
+                on_unfocus: on_unfocus.clone(),
+                on_drop_focus: on_drop_focus.clone(),
+                on_reorder: on_dock_reorder.clone(),
+                on_drag_start,
+                on_drag_end,
+                on_select,
             }
 
-            div { class: "mobile-layout",
-                if !dock_tasks.is_empty() {
-                    div { class: "focus-bar-container",
-                        for ft in &dock_tasks {
-                            {
-                                let is_active = ft.status == TaskStatus::Focused;
-                                let timer = if is_active {
-                                    time_utils::format_timer(
-                                        time_utils::focused_elapsed(ft.time_spent_secs, &ft.updated_at)
-                                    )
-                                } else {
-                                    time_utils::format_duration(ft.time_spent_secs)
-                                };
-                                rsx! {
-                                    div {
-                                        key: "{ft.id}",
-                                        class: if is_active { "focus-bar focus-bar-active" } else { "focus-bar" },
-                                        onclick: {
-                                            let id = ft.id.clone();
-                                            let mut on_select = on_select;
-                                            move |_| on_select(id.clone())
-                                        },
-                                        if is_active {
-                                            div { class: "focus-bar-dot" }
-                                        }
-                                        span { class: "focus-bar-title", "{ft.title}" }
-                                        span { class: "focus-bar-time", "{timer}" }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+            Board {
+                tasks: tasks.clone(),
+                focused_col: *focused_col.read(),
+                focused_row: *focused_row.read(),
+                dragging_id: dragging_id.read().clone(),
+                on_select,
+                on_delete: on_delete.clone(),
+                on_create: on_create.clone(),
+                on_drag_start,
+                on_drag_end,
+                on_drop,
+            }
 
-                StatusTabs {
-                    tasks: tasks.clone(),
-                    active: active_tab(),
-                    on_change: move |status: TaskStatus| active_tab.set(status),
-                }
-
-                TaskList {
-                    tasks: tasks.clone(),
-                    active_status: active_tab(),
-                    on_select,
-                    on_delete: on_delete.clone(),
-                    on_focus: on_focus.clone(),
-                    on_status_change: on_status_change.clone(),
-                }
-
-                button {
-                    class: "fab",
-                    onclick: move |_| show_capture.set(true),
-                    "+"
-                }
+            button {
+                class: "fab",
+                onclick: move |_| show_capture.set(true),
+                "+"
             }
 
             if let Some(task) = selected_task {

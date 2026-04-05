@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::components::{BoardColumn, DropTarget};
-use crate::forge::{FieldDefinition, Task, TaskField, TaskStatus};
+use crate::forge::{Task, TaskStatus};
 
 const COLUMN_STATUSES: [(&str, TaskStatus); 4] = [
     ("Inbox", TaskStatus::Inbox),
@@ -13,8 +13,6 @@ const COLUMN_STATUSES: [(&str, TaskStatus); 4] = [
 #[component]
 pub fn Board(
     tasks: Vec<Task>,
-    field_defs: Vec<FieldDefinition>,
-    task_fields: Vec<TaskField>,
     focused_col: Option<usize>,
     focused_row: Option<usize>,
     dragging_id: Option<String>,
@@ -35,12 +33,14 @@ pub fn Board(
                     status: status.clone(),
                     is_focused: focused_col == Some(i),
                     focused_row: if focused_col == Some(i) { focused_row } else { None },
-                    tasks: tasks.iter()
-                        .filter(|t| t.status == *status)
-                        .cloned()
-                        .collect::<Vec<_>>(),
-                    field_defs: field_defs.clone(),
-                    task_fields: task_fields.clone(),
+                    tasks: {
+                        let mut col: Vec<_> = tasks.iter()
+                            .filter(|t| t.status == *status)
+                            .cloned()
+                            .collect();
+                        col.sort_by_key(|t| t.position);
+                        col
+                    },
                     dragging_id: dragging_id.clone(),
                     on_select,
                     on_delete,

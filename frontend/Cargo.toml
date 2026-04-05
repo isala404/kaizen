@@ -9,10 +9,17 @@ dioxus = { version = "=0.7.3", features = ["web"] }
 forge-dioxus = { git = "https://github.com/isala404/forge", rev = "07e1a972d1cbfafc0bedb89764ee59c0b8ca8c5a" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+rand = "0.9"
+getrandom02 = { package = "getrandom", version = "0.2", features = ["js"] }
+getrandom = { version = "0.3", features = ["wasm_js"] }
+dioxus-sdk = { version = "0.7", features = ["time", "storage"] }
+pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
 wasm-bindgen = "0.2"
 web-sys = { version = "0.3", features = ["Window", "Document", "HtmlElement", "HtmlInputElement", "MediaQueryList", "Storage"] }
 gloo-timers = { version = "0.3", features = ["futures"] }
-pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
 
 [workspace]
