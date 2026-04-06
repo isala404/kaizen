@@ -1,0 +1,65 @@
+name: Kaizen
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  IMAGE_NAME: tallisa/kaizen
+
+jobs:
+  build-and-push:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Get GitHub OIDC token
+        id: oidc
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = await core.getIDToken()
+            core.setOutput('token', token)
+
+      - name: Get registry token
+        run: |
+          TOKEN="${{ steps.oidc.outputs.token }}"
+          RESPONSE=$(curl -s -X POST "https://utils.tallisa.dev/v1/github-oidc/token" \
+            -H "Content-Type: application/json" \
+            -d "{\"token\":\"${TOKEN}\"}")
+
+          REGISTRY=$(echo "${RESPONSE}" | jq -r '.registry_url')
+          USERNAME=$(echo "${RESPONSE}" | jq -r '.username')
+          PASSWORD=$(echo "${RESPONSE}" | jq -r '.password')
+          echo "REGISTRY=$REGISTRY" >> $GITHUB_ENV
+          echo "USERNAME=$USERNAME" >> $GITHUB_ENV
+          echo "PASSWORD=$PASSWORD" >> $GITHUB_ENV
+
+          echo $PASSWORD | docker login $REGISTRY -u $USERNAME --password-stdin
+
+      - name: Log in to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.USERNAME }}
+          password: ${{ env.PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:prod-${{ github.run_id }},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
