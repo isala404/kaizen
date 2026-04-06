@@ -9,6 +9,7 @@ RUN rustup target add wasm32-unknown-unknown
 RUN cargo install dioxus-cli --version 0.7.3 --locked
 COPY frontend/Cargo.toml frontend/Dioxus.toml ./
 COPY frontend/src ./src
+COPY frontend/public ./public
 RUN dx build --web --release
 
 FROM rust:1.92 AS builder
