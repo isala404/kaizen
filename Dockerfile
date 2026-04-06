@@ -21,7 +21,7 @@ COPY src ./src
 COPY migrations ./migrations
 COPY forge.toml sqlx.toml build.rs ./
 COPY frontend ./frontend
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+COPY --from=frontend-builder /app/frontend/target/dx/kaizen-frontend/release/web/public ./frontend/dist
 
 RUN cargo build --release
 

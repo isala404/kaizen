@@ -31,6 +31,12 @@ fn build_frontend() {
         panic!("frontend directory not found");
     }
 
+    // Skip if frontend was pre-built (e.g. in a separate Docker stage)
+    let dist_dir = frontend_dir.join("dist");
+    if dist_dir.exists() && dist_dir.join("index.html").exists() && std::fs::read_dir(&dist_dir).map(|d| d.count() > 1).unwrap_or(false) {
+        return;
+    }
+
     let dx = std::process::Command::new("dx")
         .arg("--version")
         .output()
