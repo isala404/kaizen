@@ -1,8 +1,9 @@
 [application]
-name = "minimal-frontend"
+name = "kaizen"
 default_platform = "web"
 out_dir = "dist"
 asset_dir = "public"
+identifier = "dev.tallisa.kaizen"
 
 [web.app]
-title = "minimal"
+title = "kaizen"
